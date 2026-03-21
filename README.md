@@ -50,31 +50,6 @@ This repository is a community customization and is not an official upstream rel
 - `src-tauri/resources/`: bundled resources such as the AI agent access guide template.
 - `src-tauri/windows/`: NSIS installer hook scripts.
 
-## Development
-
-```bash
-npm install
-npm run dev
-```
-
-## Build
-
-```bash
-npm run build
-```
-
-Build outputs are generated under `src-tauri/target/release/`.
-
-## Publishing To GitHub
-
-Upload source files only. Do not upload generated folders such as:
-
-- `node_modules/`
-- `dist-web/`
-- `src-tauri/target/`
-- `src-tauri/logs/`
-
-A ready-to-upload source bundle is generated in the local `GitHub/` folder for convenience.
 
 ## License
 

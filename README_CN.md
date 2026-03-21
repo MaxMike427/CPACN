@@ -50,31 +50,6 @@
 - `src-tauri/resources/`：内置资源，例如 AI Agent 接入教程模板。
 - `src-tauri/windows/`：Windows 安装器 Hook 脚本。
 
-## 开发
-
-```bash
-npm install
-npm run dev
-```
-
-## 构建
-
-```bash
-npm run build
-```
-
-构建产物位于 `src-tauri/target/release/`。
-
-## 上传到 GitHub
-
-上传源码即可，不要上传以下自动生成目录：
-
-- `node_modules/`
-- `dist-web/`
-- `src-tauri/target/`
-- `src-tauri/logs/`
-
-我已经在当前目录下生成了一个 `GitHub/` 文件夹，里面放的是适合上传源码仓库的整理内容。
 
 ## 许可证
 
