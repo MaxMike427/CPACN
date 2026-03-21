@@ -1,0 +1,62 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "EasyCLI",
+  "version": "1.0.5",
+  "identifier": "com.example.easycli",
+  "build": {
+    "beforeBuildCommand": "node src-tauri/prepare-web.js",
+    "beforeDevCommand": "node src-tauri/watch-web.js",
+    "frontendDist": "../dist-web",
+    "devUrl": null,
+    "removeUnusedCommands": true
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "security": {
+      "capabilities": [
+        "main"
+      ]
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "EasyCLI 启动器",
+        "width": 530,
+        "height": 380,
+        "resizable": false,
+        "dragDropEnabled": true,
+        "visible": false,
+        "url": "login.html"
+      },
+      {
+        "label": "settings",
+        "title": "EasyCLI 控制台",
+        "width": 930,
+        "height": 600,
+        "resizable": false,
+        "dragDropEnabled": true,
+        "visible": false,
+        "url": "settings.html"
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "windows": {
+      "nsis": {
+        "languages": [
+          "SimpChinese"
+        ],
+        "installerHooks": "./windows/hooks.nsh"
+      }
+    },
+    "icon": [
+      "icons/icon.png",
+      "../images/icon.icns",
+      "../images/icon.ico"
+    ]
+  }
+}
