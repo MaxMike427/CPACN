@@ -4,7 +4,7 @@
 
 This repository is a Windows-focused customized fork of EasyCLI. It keeps the Tauri desktop shell for CLIProxyAPI management and adds a Chinese control console, default local startup flow, WebUI entry, tutorial entry, network testing, and Windows installer shortcut creation.
 
-Current fork version: `1.0.5`
+Current fork version: `1.1.0`
 
 ## What This Fork Adds
 
@@ -25,6 +25,14 @@ Special thanks to the upstream projects that made this customized build possible
 - [luispater/CLIProxyAPI](https://github.com/luispater/CLIProxyAPI)
 
 This repository is a community customization and is not an official upstream release.
+
+## Upstream Sync Status
+
+Checked on `2026-03-23`.
+
+- `router-for-me/EasyCLI`: latest upstream `main` is `9758f35` (`feat: Enhance Antigravity auth flow with local server handling and improved error management`, `2025-12-08`). No newer upstream EasyCLI code needed to be merged into this fork during this update.
+- `router-for-me/Cli-Proxy-API-Management-Center`: latest upstream `main` is `2dcba439` and the latest fetched tag is `v1.7.15` (`2026-03-22`). Recent upstream changes are focused on styling, responsive layout, and visual configuration improvements.
+- This fork does not vendor the management center frontend source directly. It keeps the existing WebUI entry and tutorial flow, and records the latest upstream status in this release.
 
 ## Core Features
 

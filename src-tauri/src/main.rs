@@ -75,8 +75,16 @@ fn management_key_path() -> Result<PathBuf, AppError> {
     Ok(app_dir()?.join("remote-management.key"))
 }
 
+fn webui_version_path() -> Result<PathBuf, AppError> {
+    Ok(app_dir()?.join("webui-version.txt"))
+}
+
 fn docs_dir() -> Result<PathBuf, AppError> {
     Ok(app_dir()?.join("docs"))
+}
+
+fn static_management_html_path() -> Result<PathBuf, AppError> {
+    Ok(app_dir()?.join("static").join("management.html"))
 }
 
 fn agent_guide_path() -> Result<PathBuf, AppError> {
@@ -499,9 +507,11 @@ fn json_value_to_display(value: Option<serde_json::Value>, fallback: &str) -> St
         .unwrap_or_else(|| fallback.to_string())
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct VersionInfo {
     tag_name: String,
+    #[serde(default)]
+    published_at: Option<String>,
     assets: Vec<Asset>,
 }
 
@@ -530,10 +540,25 @@ struct OpResult {
 
 const DEFAULT_SERVICE_PORT: u16 = 8080;
 const DEFAULT_MANAGEMENT_SECRET_KEY: &str = "12345678";
+const CLI_PROXY_API_RELEASE_API_URL: &str =
+    "https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/latest";
+const MANAGEMENT_CENTER_RELEASE_API_URL: &str =
+    "https://api.github.com/repos/router-for-me/Cli-Proxy-API-Management-Center/releases/latest";
+const MANAGEMENT_CENTER_ASSET_NAME: &str = "management.html";
 const DEFAULT_PANEL_GITHUB_REPOSITORY: &str =
     "https://github.com/router-for-me/Cli-Proxy-API-Management-Center";
+const PROJECT_REPOSITORY_URL: &str = "https://github.com/MaxMike427/CPACN";
 const AGENT_GUIDE_FILE_NAME: &str = "AI_AGENT_ACCESS_GUIDE.md";
 const AGENT_GUIDE_CONTENT: &str = include_str!("../resources/AI_AGENT_ACCESS_GUIDE.md");
+const COMPONENT_UPDATE_RISK_NOTICE: &str = "组件更新将直接从 GitHub 下载最新发布版本并覆盖当前本地组件。该更新未经当前定制版开发者逐项验证，可能带来配置兼容、页面行为变化、接口差异或启动失败等风险，请确认后再更新。";
+const MANAGEMENT_CENTER_GUARD_SCRIPT: &str = r#"<script id="easycli-management-guard">(function(){try{const blocked=new Set(["oauth-excluded-models","oauth-model-alias"]);const blockedPathPattern=/\/model-definitions\/(oauth-excluded-models|oauth-model-alias)(?:[/?#]|$)/i;const buildPayload=()=>JSON.stringify({models:[]});const getUrl=value=>typeof value==="string"?value:value&&typeof value.url==="string"?value.url:"";const isBlockedUrl=value=>blockedPathPattern.test(getUrl(value));const normalizeHash=()=>{const raw=window.location.hash||"";const marker=raw.indexOf("?");if(marker===-1)return;const route=raw.slice(0,marker);if(!route.includes("/auth-files/oauth-excluded")&&!route.includes("/auth-files/oauth-model-alias"))return;const search=new URLSearchParams(raw.slice(marker+1));const provider=(search.get("provider")||"").trim().toLowerCase();if(!blocked.has(provider))return;search.delete("provider");const next=search.toString();const base=`${window.location.pathname}${window.location.search}`;history.replaceState(history.state,"",`${base}${route}${next?`?${next}`:""}`)};const dispatchEventSafe=(target,type,ctorName)=>{try{const EventCtor=window[ctorName]||window.Event;const event=new EventCtor(type);const handler=target[`on${type}`];if(typeof handler==="function")handler.call(target,event);target.dispatchEvent(event)}catch(_){}};normalizeHash();const originalFetch=typeof window.fetch==="function"?window.fetch.bind(window):null;if(originalFetch){window.fetch=function(input,init){if(isBlockedUrl(input)){return Promise.resolve(new Response(buildPayload(),{status:200,headers:{"Content-Type":"application/json"}}));}return originalFetch(input,init);};}const XHR=window.XMLHttpRequest;if(XHR&&XHR.prototype){const originalOpen=XHR.prototype.open;const originalSend=XHR.prototype.send;const originalSetRequestHeader=XHR.prototype.setRequestHeader;XHR.prototype.open=function(method,url){this.__easycliBlockedRequest=isBlockedUrl(url)?{url:getUrl(url),payload:buildPayload()}:null;if(this.__easycliBlockedRequest){return;}return originalOpen.apply(this,arguments);};XHR.prototype.setRequestHeader=function(){if(this.__easycliBlockedRequest){return;}return originalSetRequestHeader.apply(this,arguments);};XHR.prototype.send=function(){if(!this.__easycliBlockedRequest){return originalSend.apply(this,arguments);}const request=this.__easycliBlockedRequest;Object.defineProperties(this,{readyState:{configurable:true,get:()=>4},status:{configurable:true,get:()=>200},statusText:{configurable:true,get:()=>"OK"},responseURL:{configurable:true,get:()=>request.url},responseText:{configurable:true,get:()=>request.payload},response:{configurable:true,get:()=>request.payload}});this.getResponseHeader=name=>name&&String(name).toLowerCase()==="content-type"?"application/json":null;this.getAllResponseHeaders=()=>"content-type: application/json\r\n";setTimeout(()=>{dispatchEventSafe(this,"readystatechange","Event");dispatchEventSafe(this,"load","Event");dispatchEventSafe(this,"loadend","ProgressEvent");},0);};}}catch(_){}})();</script>"#;
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct ComponentUpdateRequest {
+    #[serde(default)]
+    proxy_url: Option<String>,
+}
 
 #[derive(Debug)]
 struct ManagementKeyState {
@@ -594,6 +619,10 @@ fn compare_versions(a: &str, b: &str) -> i32 {
     0
 }
 
+fn normalize_release_version(version: &str) -> String {
+    version.trim().trim_start_matches('v').to_string()
+}
+
 fn current_local_info() -> Result<Option<(String, PathBuf)>, AppError> {
     let dir = app_dir()?;
     let version_file = dir.join("version.txt");
@@ -608,14 +637,91 @@ fn current_local_info() -> Result<Option<(String, PathBuf)>, AppError> {
     Ok(Some((ver, path)))
 }
 
+fn current_webui_version() -> Result<Option<String>, AppError> {
+    let path = webui_version_path()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let version = normalize_release_version(&fs::read_to_string(path)?);
+    if version.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(version))
+}
+
+fn upsert_management_center_guard_script(html: &str) -> String {
+    let marker = r#"<script id="easycli-management-guard">"#;
+    if let Some(start) = html.find(marker) {
+        if let Some(relative_end) = html[start..].find("</script>") {
+            let end = start + relative_end + "</script>".len();
+            let mut updated = String::with_capacity(
+                html.len() - (end - start) + MANAGEMENT_CENTER_GUARD_SCRIPT.len(),
+            );
+            updated.push_str(&html[..start]);
+            updated.push_str(MANAGEMENT_CENTER_GUARD_SCRIPT);
+            updated.push_str(&html[end..]);
+            return updated;
+        }
+    }
+
+    html.replacen(
+        r#"<script type="module" crossorigin>"#,
+        format!(
+            "{}{}",
+            MANAGEMENT_CENTER_GUARD_SCRIPT, r#"<script type="module" crossorigin>"#
+        )
+        .as_str(),
+        1,
+    )
+}
+
 fn ensure_config(version_path: &Path) -> Result<(), AppError> {
     let (config_path, mut config_value) = load_local_config(Some(version_path))?;
     let changed = ensure_config_defaults(&mut config_value)?;
     if changed {
         save_local_config(&config_path, &config_value)?;
     }
+    let _ = patch_management_center_html();
     let _ = ensure_agent_guide_file()?;
     Ok(())
+}
+
+fn patch_management_center_html() -> Result<bool, AppError> {
+    let html_path = static_management_html_path()?;
+    if !html_path.exists() {
+        return Ok(false);
+    }
+
+    let original = fs::read_to_string(&html_path)?;
+    let mut patched = original.clone();
+
+    patched = patched.replace(
+        r#"const xt=(Re||(r!=="all"?String(r):"")).trim(),Nt=new URLSearchParams;xt&&Nt.set("provider",xt);"#,
+        r#"const xt=(Re||(r!=="all"?String(r):"")).trim(),Nt=new URLSearchParams,Qe=xt.toLowerCase();xt&&Qe!=="oauth-excluded-models"&&Qe!=="oauth-model-alias"&&Nt.set("provider",xt);"#,
+    );
+    patched = patched.replace(
+        r#"const W=S.useMemo(()=>a1(d),[d]),$="#,
+        r#"const W=S.useMemo(()=>{const I=a1(d);return I==="oauth-excluded-models"||I==="oauth-model-alias"?"":I},[d]),$="#,
+    );
+    patched = patched.replace(
+        r#"W=S.useMemo(()=>a1(d),[d]),$="#,
+        r#"W=S.useMemo(()=>{const I=a1(d);return I==="oauth-excluded-models"||I==="oauth-model-alias"?"":I},[d]),$="#,
+    );
+    patched = patched.replace(
+        r#"async getModelDefinitions(t){const e=String(t??"").trim().toLowerCase();if(!e)return[];const n=await Fe.get(`/model-definitions/${encodeURIComponent(e)}`),i=n.models??n.models;return Array.isArray(i)?i:[]}"#,
+        r#"async getModelDefinitions(t){const e=String(t??"").trim().toLowerCase();if(!e||e==="oauth-excluded-models"||e==="oauth-model-alias")return[];const n=await Fe.get(`/model-definitions/${encodeURIComponent(e)}`),i=n.models??n.models;return Array.isArray(i)?i:[]}"#,
+    );
+
+    patched = upsert_management_center_guard_script(&patched);
+
+    if patched == original {
+        return Ok(false);
+    }
+
+    fs::write(&html_path, patched)?;
+    Ok(true)
 }
 
 fn parse_proxy(proxy_url: &str, builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
@@ -810,17 +916,68 @@ fn parse_proxy_url(proxy_url: &str) -> Result<ProxyConfig, String> {
     }
 }
 
-async fn fetch_latest_release(proxy_url: String) -> Result<VersionInfo, AppError> {
+async fn fetch_latest_release_from_api(
+    proxy_url: String,
+    api_url: &str,
+) -> Result<VersionInfo, AppError> {
     let client = parse_proxy(&proxy_url, reqwest::Client::builder())
         .user_agent("EasyCLI")
         .build()?;
     let resp = client
-        .get("https://api.github.com/repos/luispater/CLIProxyAPI/releases/latest")
+        .get(api_url)
         .header("Accept", "application/vnd.github.v3+json")
         .send()
         .await?
         .error_for_status()?;
     Ok(resp.json::<VersionInfo>().await?)
+}
+
+async fn fetch_latest_release(proxy_url: String) -> Result<VersionInfo, AppError> {
+    fetch_latest_release_from_api(proxy_url, CLI_PROXY_API_RELEASE_API_URL).await
+}
+
+async fn fetch_latest_management_center_release(
+    proxy_url: String,
+) -> Result<VersionInfo, AppError> {
+    fetch_latest_release_from_api(proxy_url, MANAGEMENT_CENTER_RELEASE_API_URL).await
+}
+
+async fn download_management_center_release(
+    proxy_url: &str,
+    release: &VersionInfo,
+    latest: &str,
+) -> Result<PathBuf, AppError> {
+    let asset = release
+        .assets
+        .iter()
+        .find(|item| item.name.eq_ignore_ascii_case(MANAGEMENT_CENTER_ASSET_NAME))
+        .ok_or_else(|| {
+            AppError::Other(format!(
+                "No suitable WebUI asset found: {}",
+                MANAGEMENT_CENTER_ASSET_NAME
+            ))
+        })?;
+
+    let client = parse_proxy(proxy_url, reqwest::Client::builder())
+        .user_agent("EasyCLI")
+        .build()?;
+    let response = client
+        .get(&asset.browser_download_url)
+        .header("Accept", "application/octet-stream")
+        .send()
+        .await?
+        .error_for_status()?;
+    let bytes = response.bytes().await?;
+
+    let html_path = static_management_html_path()?;
+    if let Some(parent) = html_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&html_path, &bytes)?;
+    fs::write(webui_version_path()?, latest)?;
+    let _ = patch_management_center_html();
+
+    Ok(html_path)
 }
 
 fn platform_archive_filename(version: &str) -> Result<String, AppError> {
@@ -959,16 +1116,13 @@ async fn ensure_latest_local_installation(
     let dir = app_dir()?;
     fs::create_dir_all(&dir)?;
 
-    let release = fetch_latest_release(proxy_url.clone()).await?;
-    let latest = release.tag_name.trim_start_matches('v').to_string();
-
     if let Some((version, path)) = current_local_info()? {
-        if compare_versions(&version, &latest) >= 0 {
-            ensure_config(&path)?;
-            return Ok((version, path));
-        }
+        ensure_config(&path)?;
+        return Ok((version, path));
     }
 
+    let release = fetch_latest_release(proxy_url.clone()).await?;
+    let latest = release.tag_name.trim_start_matches('v').to_string();
     let extract_path =
         download_and_install_cliproxyapi_release(&proxy_url, release, &latest, None).await?;
     Ok((latest, extract_path))
@@ -1000,6 +1154,7 @@ async fn open_local_management_center(app: tauri::AppHandle) -> Result<(), Strin
     start_cliproxyapi(app.clone())?;
     let port = current_local_service_port();
     wait_for_local_management_ui(port).await;
+    let _ = patch_management_center_html();
     open_external_target(&local_management_url(port)).map_err(|error| error.to_string())
 }
 
@@ -1016,6 +1171,7 @@ async fn bootstrap_default_local_mode(app: tauri::AppHandle) -> Result<(), Strin
     start_cliproxyapi(app.clone())?;
     let port = current_local_service_port();
     wait_for_local_management_ui(port).await;
+    let _ = patch_management_center_html();
     open_settings_window(app)
 }
 
@@ -1032,48 +1188,75 @@ async fn check_version_and_download(
     window
         .emit("download-status", json!({"status": "checking"}))
         .ok();
+
+    if let Some((ver, path)) = local {
+        ensure_config(&path).map_err(|e| e.to_string())?;
+        match fetch_latest_release(proxy.clone()).await {
+            Ok(release) => {
+                let latest = release.tag_name.trim_start_matches('v').to_string();
+                let cmp = compare_versions(&ver, &latest);
+                if cmp >= 0 {
+                    window
+                        .emit(
+                            "download-status",
+                            json!({"status": "latest", "version": ver}),
+                        )
+                        .ok();
+                    return Ok(json!(OpResult {
+                        success: true,
+                        error: None,
+                        path: Some(path.to_string_lossy().to_string()),
+                        version: Some(ver),
+                        needsUpdate: Some(false),
+                        isLatest: Some(true),
+                        latestVersion: None
+                    }));
+                } else {
+                    window
+                        .emit(
+                            "download-status",
+                            json!({"status": "update-available", "version": ver, "latest": latest}),
+                        )
+                        .ok();
+                    return Ok(json!(OpResult {
+                        success: true,
+                        error: None,
+                        path: Some(path.to_string_lossy().to_string()),
+                        version: Some(ver),
+                        needsUpdate: Some(true),
+                        isLatest: Some(false),
+                        latestVersion: Some(latest)
+                    }));
+                }
+            }
+            Err(error) => {
+                eprintln!(
+                    "[STARTUP] release check failed, continuing with local runtime {}: {}",
+                    ver, error
+                );
+                window
+                    .emit(
+                        "download-status",
+                        json!({"status": "latest", "version": ver}),
+                    )
+                    .ok();
+                return Ok(json!(OpResult {
+                    success: true,
+                    error: None,
+                    path: Some(path.to_string_lossy().to_string()),
+                    version: Some(ver),
+                    needsUpdate: Some(false),
+                    isLatest: Some(true),
+                    latestVersion: None
+                }));
+            }
+        }
+    }
+
     let release = fetch_latest_release(proxy.clone())
         .await
         .map_err(|e| e.to_string())?;
     let latest = release.tag_name.trim_start_matches('v').to_string();
-
-    if let Some((ver, path)) = local {
-        let cmp = compare_versions(&ver, &latest);
-        ensure_config(&path).map_err(|e| e.to_string())?;
-        if cmp >= 0 {
-            window
-                .emit(
-                    "download-status",
-                    json!({"status": "latest", "version": ver}),
-                )
-                .ok();
-            return Ok(json!(OpResult {
-                success: true,
-                error: None,
-                path: Some(path.to_string_lossy().to_string()),
-                version: Some(ver),
-                needsUpdate: Some(false),
-                isLatest: Some(true),
-                latestVersion: None
-            }));
-        } else {
-            window
-                .emit(
-                    "download-status",
-                    json!({"status": "update-available", "version": ver, "latest": latest}),
-                )
-                .ok();
-            return Ok(json!(OpResult {
-                success: true,
-                error: None,
-                path: Some(path.to_string_lossy().to_string()),
-                version: Some(ver),
-                needsUpdate: Some(true),
-                isLatest: Some(false),
-                latestVersion: Some(latest)
-            }));
-        }
-    }
     // No local found
     Ok(json!(OpResult {
         success: true,
@@ -2254,7 +2437,7 @@ fn get_local_runtime_info() -> Result<serde_json::Value, String> {
 #[tauri::command]
 async fn run_network_test() -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
-        .user_agent("EasyCLI/1.0.5")
+        .user_agent("EasyCLI/1.1.0")
         .timeout(Duration::from_secs(15))
         .build()
         .map_err(|e| format!("创建网络测试请求失败: {}", e))?;
@@ -2308,6 +2491,142 @@ async fn run_network_test() -> Result<serde_json::Value, String> {
     Ok(json!({
         "success": true,
         "result": result
+    }))
+}
+
+async fn build_component_update_status(proxy_url: String) -> Result<serde_json::Value, AppError> {
+    let cli_release = fetch_latest_release(proxy_url.clone()).await?;
+    let cli_latest = normalize_release_version(&cli_release.tag_name);
+    let cli_current = current_local_info()?.map(|(version, _)| version);
+    let cli_has_update = match cli_current.as_deref() {
+        Some(current) if !current.is_empty() => compare_versions(current, &cli_latest) < 0,
+        _ => true,
+    };
+
+    let webui_release = fetch_latest_management_center_release(proxy_url).await?;
+    let webui_latest = normalize_release_version(&webui_release.tag_name);
+    let webui_current = current_webui_version()?;
+    let webui_installed = static_management_html_path()?.exists();
+    let webui_has_update = match webui_current.as_deref() {
+        Some(current) if !current.is_empty() => compare_versions(current, &webui_latest) < 0,
+        _ => true,
+    };
+    let webui_note = if webui_current.is_none() {
+        Some(if webui_installed {
+            "当前 WebUI 版本未记录，建议更新以覆盖旧组件。"
+        } else {
+            "尚未检测到本地 WebUI 文件，更新时会一并下载。"
+        })
+    } else {
+        None
+    };
+
+    Ok(json!({
+        "success": true,
+        "hasUpdates": cli_has_update || webui_has_update,
+        "riskNotice": COMPONENT_UPDATE_RISK_NOTICE,
+        "projectRepository": PROJECT_REPOSITORY_URL,
+        "webuiRepository": DEFAULT_PANEL_GITHUB_REPOSITORY,
+        "cliProxyApi": {
+            "currentVersion": cli_current,
+            "latestVersion": cli_latest,
+            "latestTag": cli_release.tag_name,
+            "publishedAt": cli_release.published_at,
+            "hasUpdate": cli_has_update,
+        },
+        "webui": {
+            "currentVersion": webui_current,
+            "latestVersion": webui_latest,
+            "latestTag": webui_release.tag_name,
+            "publishedAt": webui_release.published_at,
+            "hasUpdate": webui_has_update,
+            "note": webui_note,
+        }
+    }))
+}
+
+#[tauri::command]
+async fn check_component_updates(
+    request: Option<ComponentUpdateRequest>,
+) -> Result<serde_json::Value, String> {
+    let proxy_url = request
+        .and_then(|value| value.proxy_url)
+        .unwrap_or_default();
+    build_component_update_status(proxy_url)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+fn relaunch_current_application() -> Result<(), AppError> {
+    let exe = std::env::current_exe()?;
+    let mut command = std::process::Command::new(exe);
+    #[cfg(target_os = "windows")]
+    {
+        command.creation_flags(0x08000000);
+    }
+    command.spawn()?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn update_components_and_restart(
+    app: tauri::AppHandle,
+    request: Option<ComponentUpdateRequest>,
+) -> Result<serde_json::Value, String> {
+    let proxy_url = request
+        .and_then(|value| value.proxy_url)
+        .unwrap_or_default();
+
+    let cli_release = fetch_latest_release(proxy_url.clone())
+        .await
+        .map_err(|error| error.to_string())?;
+    let cli_latest = normalize_release_version(&cli_release.tag_name);
+    let cli_current = current_local_info().map_err(|error| error.to_string())?;
+    let cli_should_update = match cli_current.as_ref().map(|(version, _)| version.as_str()) {
+        Some(current) if !current.is_empty() => compare_versions(current, &cli_latest) < 0,
+        _ => true,
+    };
+
+    if cli_should_update {
+        let _ =
+            download_and_install_cliproxyapi_release(&proxy_url, cli_release, &cli_latest, None)
+                .await
+                .map_err(|error| error.to_string())?;
+    } else if let Some((_, path)) = cli_current {
+        ensure_config(&path).map_err(|error| error.to_string())?;
+    }
+
+    let webui_release = fetch_latest_management_center_release(proxy_url.clone())
+        .await
+        .map_err(|error| error.to_string())?;
+    let webui_latest = normalize_release_version(&webui_release.tag_name);
+    let webui_current = current_webui_version().map_err(|error| error.to_string())?;
+    let webui_should_update = match webui_current.as_deref() {
+        Some(current) if !current.is_empty() => compare_versions(current, &webui_latest) < 0,
+        _ => true,
+    };
+
+    if webui_should_update {
+        let _ = download_management_center_release(&proxy_url, &webui_release, &webui_latest)
+            .await
+            .map_err(|error| error.to_string())?;
+    } else {
+        let _ = patch_management_center_html();
+    }
+
+    relaunch_current_application().map_err(|error| error.to_string())?;
+    let app_to_exit = app.clone();
+    tauri::async_runtime::spawn(async move {
+        sleep(Duration::from_millis(450)).await;
+        app_to_exit.exit(0);
+    });
+
+    Ok(json!({
+        "success": true,
+        "cliProxyApiUpdated": cli_should_update,
+        "webuiUpdated": webui_should_update,
+        "projectRepository": PROJECT_REPOSITORY_URL,
+        "webuiRepository": DEFAULT_PANEL_GITHUB_REPOSITORY,
     }))
 }
 
@@ -2581,6 +2900,8 @@ fn main() {
             open_agent_guide_path,
             get_local_runtime_info,
             run_network_test,
+            check_component_updates,
+            update_components_and_restart,
             start_callback_server,
             stop_callback_server,
             save_files_to_directory,

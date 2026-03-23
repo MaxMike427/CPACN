@@ -53,6 +53,7 @@ const autoLocalPanel = document.getElementById('auto-local-panel');
 const autoLocalStatus = document.getElementById('auto-local-status');
 
 let autoLocalStartupInProgress = false;
+let autoLocalStartupBlocked = false;
 
 function getLauncherMode() {
     if (typeof window.__EASYCLI_LAUNCHER_MODE__ === 'string') {
@@ -90,6 +91,29 @@ function applyLauncherMode(mode) {
 
 function fallbackToManualLauncher(message) {
     applyLauncherMode('manual');
+    if (message) {
+        showError(message);
+    }
+}
+
+function applyLauncherMode(mode) {
+    const nextMode = mode === 'manual' ? 'manual' : 'auto-local';
+    window.__EASYCLI_LAUNCHER_MODE__ = nextMode;
+    document.body.classList.toggle('auto-local-mode', nextMode === 'auto-local');
+
+    if (nextMode === 'auto-local') {
+        autoLocalStartupBlocked = false;
+        updateAutoLocalStatus('Preparing local runtime...');
+    } else {
+        autoLocalStartupInProgress = false;
+        autoLocalStartupBlocked = false;
+    }
+}
+
+function fallbackToManualLauncher(message) {
+    autoLocalStartupInProgress = false;
+    autoLocalStartupBlocked = true;
+    updateAutoLocalStatus('Local startup failed. Use the tray menu to reopen the launcher if manual control is required.');
     if (message) {
         showError(message);
     }
@@ -187,7 +211,7 @@ async function performCliProxyApiUpdate(options = {}) {
         const secretKeyResult = await window.__TAURI__.core.invoke('check_secret_key');
         if (secretKeyResult.needsPassword) {
             if (autoLocal) {
-                applyLauncherMode('manual');
+                updateAutoLocalStatus('Set a management key to continue local startup.');
             }
             console.log('Password needs to be set:', secretKeyResult.reason);
             passwordDialog.classList.add('show');
@@ -254,6 +278,10 @@ async function maybeAutoLaunchLocal(force = false) {
         return;
     }
 
+    if (autoLocalStartupBlocked && !force) {
+        return;
+    }
+
     if (!window.__TAURI__?.core?.invoke) {
         return;
     }
@@ -279,7 +307,10 @@ async function maybeAutoLaunchLocal(force = false) {
 }
 
 window.applyLauncherMode = applyLauncherMode;
-window.__triggerAutoLocalStartup = () => maybeAutoLaunchLocal(true);
+window.__triggerAutoLocalStartup = () => {
+    autoLocalStartupBlocked = false;
+    return maybeAutoLaunchLocal(true);
+};
 
 updateCancelBtn.addEventListener('click', async () => {
     updateDialog.classList.remove('show');
@@ -538,7 +569,7 @@ async function handleConnectClick(options = {}) {
                         if (secretKeyResult.needsPassword) {
                             console.log('Password needs to be set:', secretKeyResult.reason);
                             if (autoLocal) {
-                                applyLauncherMode('manual');
+                                updateAutoLocalStatus('Set a management key to continue local startup.');
                             }
                             passwordDialog.classList.add('show');
                         } else {

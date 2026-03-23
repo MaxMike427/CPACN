@@ -4,7 +4,7 @@
 
 这是一个面向 Windows 的 EasyCLI 定制分支，保留了基于 Tauri 的 CLIProxyAPI 桌面控制能力，并加入了中文控制台、默认本地启动、WebUI 入口、接入教程、网络测试，以及安装后自动创建桌面快捷方式等功能。
 
-当前定制版版本号：`1.0.5`
+当前定制版版本号：`1.1.0`
 
 ## 这个定制版增加了什么
 
@@ -25,6 +25,14 @@
 - [luispater/CLIProxyAPI](https://github.com/luispater/CLIProxyAPI)
 
 本仓库是社区定制版本，不代表上游官方发布。
+
+## 上游同步状态
+
+检查时间：`2026-03-23`
+
+- `router-for-me/EasyCLI`：上游 `main` 最新提交是 `9758f35`，提交说明为 `feat: Enhance Antigravity auth flow with local server handling and improved error management`，提交时间 `2025-12-08`。这次检查没有发现比当前已同步基线更新的 EasyCLI 上游代码需要再合入。
+- `router-for-me/Cli-Proxy-API-Management-Center`：上游 `main` 最新提交是 `2dcba439`，本地拉取到的最新标签是 `v1.7.15`，时间 `2026-03-22`。最近更新主要集中在样式、响应式布局和可视化配置界面优化。
+- 这个定制版没有直接内嵌管理中心前端源码，而是保留现有 WebUI 入口和教程接入方式，因此这次更新以同步上游状态说明、保留现有功能和重新打包为主。
 
 ## 核心功能
 
