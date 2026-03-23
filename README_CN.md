@@ -1,6 +1,7 @@
 # EasyCLI Windows 定制版
 
 [English README](README.md)
+本软件使用codex生成调用OpenAI gpt-5.4
 
 这是一个面向 Windows 的 EasyCLI 定制分支，保留了基于 Tauri 的 CLIProxyAPI 桌面控制能力，并加入了中文控制台、默认本地启动、WebUI 入口、接入教程、网络测试，以及安装后自动创建桌面快捷方式等功能。
 
