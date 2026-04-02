@@ -5,6 +5,7 @@
 const debugSwitch = document.getElementById('debug-switch');
 const proxyUrlInput = document.getElementById('proxy-url-input');
 const portInput = document.getElementById('port-input');
+const portDescription = document.getElementById('port-description');
 const requestLogSwitch = document.getElementById('request-log-switch');
 const requestRetryInput = document.getElementById('request-retry-input');
 const allowRemoteSwitch = document.getElementById('allow-remote-switch');
@@ -16,12 +17,14 @@ const autoStartSwitch = document.getElementById('auto-start-switch');
 // Action buttons
 const applyBtn = document.getElementById('apply-btn');
 const resetBtn = document.getElementById('reset-btn');
+const restartServiceBtn = document.getElementById('restart-service-btn');
 
 // Server status display
 const serverStatusText = document.getElementById('server-status-text');
 
 // Store original config for comparison
 let originalConfig = null;
+let restartServiceInProgress = false;
 
 // Initialize debug switch from config
 async function initializeDebugSwitch() {
@@ -46,13 +49,28 @@ async function initializeProxyUrl() {
 }
 
 // Initialize port from config
+function updatePortDescription(port) {
+    const currentPort = Number(port) > 0 ? Number(port) : 8080;
+
+    if (portDescription) {
+        portDescription.textContent = `服务端口号（当前：${currentPort}）`;
+    }
+
+    if (portInput) {
+        portInput.placeholder = String(currentPort);
+    }
+}
+
 async function initializePort() {
     try {
         const config = await configManager.getConfig();
-        portInput.value = config.port || 8080;
+        const currentPort = config.port || 8080;
+        portInput.value = currentPort;
+        updatePortDescription(currentPort);
     } catch (error) {
         console.error('Error loading config:', error);
         portInput.value = 8080;
+        updatePortDescription(8080);
     }
 }
 
@@ -113,6 +131,98 @@ window.addEventListener('storage', (event) => {
         updateServerStatus();
     }
 });
+
+function updateServerStatus() {
+    const connectionType = localStorage.getItem('type') || 'local';
+
+    if (connectionType === 'local') {
+        serverStatusText.innerHTML = '<span style="color: #10b981;">&#9679;</span> 本地';
+        if (restartServiceBtn) {
+            restartServiceBtn.style.display = 'inline-flex';
+        }
+        return;
+    }
+
+    configManager.refreshConnection();
+    const storedBaseUrl = localStorage.getItem('base-url');
+    const baseUrl = storedBaseUrl || configManager.baseUrl;
+
+    if (baseUrl) {
+        serverStatusText.innerHTML = `远程：<br><span style="color: #10b981;">&#9679;</span> ${baseUrl}`;
+    } else {
+        serverStatusText.innerHTML = '远程：<br><span style="color: #10b981;">&#9679;</span> 未知地址';
+    }
+
+    if (restartServiceBtn) {
+        restartServiceBtn.style.display = 'none';
+    }
+}
+
+function setRestartServiceButtonLoading(isLoading) {
+    if (!restartServiceBtn) {
+        return;
+    }
+
+    restartServiceBtn.disabled = isLoading;
+    restartServiceBtn.textContent = isLoading ? '重启中...' : '重启服务';
+}
+
+async function restartLocalServiceStackFromCore(options = {}) {
+    const { showSuccessToast = true, successMessage = '本地服务已重启' } = options;
+
+    if (restartServiceInProgress) {
+        return null;
+    }
+
+    if (!window.__TAURI__?.core?.invoke) {
+        throw new Error('当前环境不支持重启服务');
+    }
+
+    restartServiceInProgress = true;
+    setRestartServiceButtonLoading(true);
+
+    try {
+        const result = await window.__TAURI__.core.invoke('restart_local_service_stack');
+
+        if (result?.password) {
+            localStorage.setItem('local-management-key', result.password);
+        }
+        if (result?.port && portInput) {
+            portInput.value = result.port;
+            updatePortDescription(result.port);
+        }
+        const webuiUrlText = document.getElementById('webui-url-text');
+        if (result?.url && webuiUrlText) {
+            webuiUrlText.textContent = result.url;
+        }
+
+        if (typeof refreshWebuiPanel === 'function') {
+            await refreshWebuiPanel();
+        }
+
+        updateServerStatus();
+
+        if (showSuccessToast) {
+            showSuccessMessage(successMessage);
+        }
+
+        return result;
+    } finally {
+        restartServiceInProgress = false;
+        setRestartServiceButtonLoading(false);
+    }
+}
+
+async function handleRestartServiceClick() {
+    try {
+        await restartLocalServiceStackFromCore();
+    } catch (error) {
+        console.error('Error restarting local service:', error);
+        showError(error?.message || '重启服务失败');
+    }
+}
+
+window.restartLocalServiceStackFromCore = restartLocalServiceStackFromCore;
 
 
 // Initialize additional settings from config
@@ -337,10 +447,9 @@ async function applyAllSettings() {
 
             if (portChanged && localStorage.getItem('type') === 'local') {
                 console.log('Port configuration has changed, need to restart CLIProxyAPI process');
-                showSuccessMessage('Port configuration saved, restarting CLIProxyAPI process...');
-                if (window.__TAURI__?.core?.invoke) {
-                    window.__TAURI__.core.invoke('restart_cliproxyapi');
-                }
+                await restartLocalServiceStackFromCore({
+                    successMessage: '端口配置已保存，本地服务已重启'
+                });
             }
         } else {
             showError(`Failed to apply ${changes.length - successCount} setting(s)`);
@@ -368,7 +477,9 @@ async function resetAllSettings() {
 
             const connectionType = localStorage.getItem('type') || 'local';
             if (connectionType === 'local') {
-                portInput.value = serverConfig.port || 8080;
+                const currentPort = serverConfig.port || 8080;
+                portInput.value = currentPort;
+                updatePortDescription(currentPort);
                 const serverRemoteManagement = serverConfig['remote-management'] || {};
                 allowRemoteSwitch.checked = serverRemoteManagement['allow-remote'] || false;
                 secretKeyInput.value = '';
@@ -422,3 +533,6 @@ async function resetAllSettings() {
 // Wire core button events
 applyBtn.addEventListener('click', applyAllSettings);
 resetBtn.addEventListener('click', resetAllSettings);
+if (restartServiceBtn) {
+    restartServiceBtn.addEventListener('click', handleRestartServiceClick);
+}

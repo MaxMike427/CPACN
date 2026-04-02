@@ -16,13 +16,13 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Cursor;
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 #[cfg(not(target_os = "windows"))]
 use std::os::unix::process::CommandExt;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -33,7 +33,6 @@ use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use thiserror::Error;
 use tokio::time::sleep;
 
-static PROCESS: Lazy<Arc<Mutex<Option<Child>>>> = Lazy::new(|| Arc::new(Mutex::new(None)));
 static PROCESS_PID: Lazy<Arc<Mutex<Option<u32>>>> = Lazy::new(|| Arc::new(Mutex::new(None)));
 static TRAY_ICON: Lazy<Arc<Mutex<Option<TrayIcon>>>> = Lazy::new(|| Arc::new(Mutex::new(None)));
 static CALLBACK_SERVERS: Lazy<Arc<Mutex<HashMap<u16, (Arc<AtomicBool>, thread::JoinHandle<()>)>>>> =
@@ -301,10 +300,21 @@ fn prepare_launch_config(version_path: &Path) -> Result<(PathBuf, u16, String), 
         serde_yaml::Value::from(password.as_str()),
     );
 
-    let port = root
+    let configured_port = root
         .get(&serde_yaml::Value::from("port"))
         .and_then(|value| value.as_u64())
         .unwrap_or(DEFAULT_SERVICE_PORT as u64) as u16;
+    let port = choose_available_local_service_port(configured_port)?;
+    if port != configured_port {
+        println!(
+            "[CLIProxyAPI][PORT] Configured port {} is unavailable, switching local service to {}",
+            configured_port, port
+        );
+        root.insert(
+            serde_yaml::Value::from("port"),
+            serde_yaml::Value::from(port),
+        );
+    }
 
     save_local_config(&config_path, &config_value)?;
 
@@ -388,6 +398,98 @@ fn current_local_service_port() -> u16 {
         .get("port")
         .and_then(|value| value.as_u64())
         .unwrap_or(DEFAULT_SERVICE_PORT as u64) as u16
+}
+
+fn is_management_center_response(response: &str) -> bool {
+    response.contains("CLI Proxy API Management Center")
+        || response.contains("CPAMC")
+        || response.contains("management.html")
+}
+
+fn is_local_port_available(port: u16) -> bool {
+    TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], port)))
+        .map(|listener| {
+            drop(listener);
+            true
+        })
+        .unwrap_or(false)
+}
+
+fn choose_available_local_service_port(preferred_port: u16) -> Result<u16, AppError> {
+    let mut candidates = vec![preferred_port];
+    if preferred_port != DEFAULT_SERVICE_PORT {
+        candidates.push(DEFAULT_SERVICE_PORT);
+    }
+
+    for candidate in DEFAULT_SERVICE_PORT..(DEFAULT_SERVICE_PORT + 20) {
+        if !candidates.contains(&candidate) {
+            candidates.push(candidate);
+        }
+    }
+
+    for candidate in 18080..18100 {
+        if !candidates.contains(&candidate) {
+            candidates.push(candidate);
+        }
+    }
+
+    for candidate in candidates {
+        if is_local_management_ui_ready_now(candidate, Duration::from_millis(900))
+            || is_local_port_available(candidate)
+        {
+            return Ok(candidate);
+        }
+    }
+
+    let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))?;
+    let port = listener.local_addr()?.port();
+    drop(listener);
+    Ok(port)
+}
+
+fn is_local_management_ui_ready_now(port: u16, timeout: Duration) -> bool {
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let mut stream = match TcpStream::connect_timeout(&addr, timeout) {
+        Ok(stream) => stream,
+        Err(_) => return false,
+    };
+
+    let _ = stream.set_read_timeout(Some(timeout));
+    let _ = stream.set_write_timeout(Some(timeout));
+
+    let request = format!(
+        "GET /management.html HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: close\r\n\r\n",
+        port
+    );
+    if stream.write_all(request.as_bytes()).is_err() {
+        return false;
+    }
+
+    let mut buffer = [0_u8; 512];
+    let size = match stream.read(&mut buffer) {
+        Ok(size) if size > 0 => size,
+        _ => return false,
+    };
+
+    let response = String::from_utf8_lossy(&buffer[..size]);
+    (response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200"))
+        && is_management_center_response(&response)
+}
+
+fn attach_existing_local_service(
+    app: &tauri::AppHandle,
+    port: u16,
+    password: &str,
+) -> serde_json::Value {
+    *CLI_PROXY_PASSWORD.lock() = Some(password.to_string());
+    let _ = create_tray(app);
+    let _ = start_keep_alive(port);
+    json!({
+        "success": true,
+        "message": "existing local service attached",
+        "password": password,
+        "reused": true
+    })
 }
 
 fn resolve_path(input: &str, base: Option<&Path>) -> PathBuf {
@@ -550,6 +652,14 @@ const DEFAULT_PANEL_GITHUB_REPOSITORY: &str =
 const PROJECT_REPOSITORY_URL: &str = "https://github.com/MaxMike427/CPACN";
 const AGENT_GUIDE_FILE_NAME: &str = "AI_AGENT_ACCESS_GUIDE.md";
 const AGENT_GUIDE_CONTENT: &str = include_str!("../resources/AI_AGENT_ACCESS_GUIDE.md");
+const BUNDLED_CLI_PROXY_API_VERSION: &str =
+    include_str!("../resources/bundled/cliproxyapi-version.txt");
+const BUNDLED_CLI_PROXY_API_ASSET_NAME: &str =
+    include_str!("../resources/bundled/cliproxyapi-asset-name.txt");
+const BUNDLED_CLI_PROXY_API_ARCHIVE_BYTES: &[u8] =
+    include_bytes!("../resources/bundled/cliproxyapi-bundle.bin");
+const BUNDLED_WEBUI_VERSION: &str = include_str!("../resources/bundled/webui-version.txt");
+const BUNDLED_MANAGEMENT_HTML: &str = include_str!("../resources/bundled/management.html");
 const COMPONENT_UPDATE_RISK_NOTICE: &str = "组件更新将直接从 GitHub 下载最新发布版本并覆盖当前本地组件。该更新未经当前定制版开发者逐项验证，可能带来配置兼容、页面行为变化、接口差异或启动失败等风险，请确认后再更新。";
 const MANAGEMENT_CENTER_GUARD_SCRIPT: &str = r#"<script id="easycli-management-guard">(function(){try{const blocked=new Set(["oauth-excluded-models","oauth-model-alias"]);const blockedPathPattern=/\/model-definitions\/(oauth-excluded-models|oauth-model-alias)(?:[/?#]|$)/i;const buildPayload=()=>JSON.stringify({models:[]});const getUrl=value=>typeof value==="string"?value:value&&typeof value.url==="string"?value.url:"";const isBlockedUrl=value=>blockedPathPattern.test(getUrl(value));const normalizeHash=()=>{const raw=window.location.hash||"";const marker=raw.indexOf("?");if(marker===-1)return;const route=raw.slice(0,marker);if(!route.includes("/auth-files/oauth-excluded")&&!route.includes("/auth-files/oauth-model-alias"))return;const search=new URLSearchParams(raw.slice(marker+1));const provider=(search.get("provider")||"").trim().toLowerCase();if(!blocked.has(provider))return;search.delete("provider");const next=search.toString();const base=`${window.location.pathname}${window.location.search}`;history.replaceState(history.state,"",`${base}${route}${next?`?${next}`:""}`)};const dispatchEventSafe=(target,type,ctorName)=>{try{const EventCtor=window[ctorName]||window.Event;const event=new EventCtor(type);const handler=target[`on${type}`];if(typeof handler==="function")handler.call(target,event);target.dispatchEvent(event)}catch(_){}};normalizeHash();const originalFetch=typeof window.fetch==="function"?window.fetch.bind(window):null;if(originalFetch){window.fetch=function(input,init){if(isBlockedUrl(input)){return Promise.resolve(new Response(buildPayload(),{status:200,headers:{"Content-Type":"application/json"}}));}return originalFetch(input,init);};}const XHR=window.XMLHttpRequest;if(XHR&&XHR.prototype){const originalOpen=XHR.prototype.open;const originalSend=XHR.prototype.send;const originalSetRequestHeader=XHR.prototype.setRequestHeader;XHR.prototype.open=function(method,url){this.__easycliBlockedRequest=isBlockedUrl(url)?{url:getUrl(url),payload:buildPayload()}:null;if(this.__easycliBlockedRequest){return;}return originalOpen.apply(this,arguments);};XHR.prototype.setRequestHeader=function(){if(this.__easycliBlockedRequest){return;}return originalSetRequestHeader.apply(this,arguments);};XHR.prototype.send=function(){if(!this.__easycliBlockedRequest){return originalSend.apply(this,arguments);}const request=this.__easycliBlockedRequest;Object.defineProperties(this,{readyState:{configurable:true,get:()=>4},status:{configurable:true,get:()=>200},statusText:{configurable:true,get:()=>"OK"},responseURL:{configurable:true,get:()=>request.url},responseText:{configurable:true,get:()=>request.payload},response:{configurable:true,get:()=>request.payload}});this.getResponseHeader=name=>name&&String(name).toLowerCase()==="content-type"?"application/json":null;this.getAllResponseHeaders=()=>"content-type: application/json\r\n";setTimeout(()=>{dispatchEventSafe(this,"readystatechange","Event");dispatchEventSafe(this,"load","Event");dispatchEventSafe(this,"loadend","ProgressEvent");},0);};}}catch(_){}})();</script>"#;
 
@@ -634,6 +744,9 @@ fn current_local_info() -> Result<Option<(String, PathBuf)>, AppError> {
     if !path.exists() {
         return Ok(None);
     }
+    if find_executable(&path).is_none() {
+        return Ok(None);
+    }
     Ok(Some((ver, path)))
 }
 
@@ -649,6 +762,116 @@ fn current_webui_version() -> Result<Option<String>, AppError> {
     }
 
     Ok(Some(version))
+}
+
+fn bundled_cliproxyapi_version() -> Option<String> {
+    let version = normalize_release_version(BUNDLED_CLI_PROXY_API_VERSION);
+    let asset_name = BUNDLED_CLI_PROXY_API_ASSET_NAME.trim();
+    if version.is_empty() || asset_name.is_empty() || BUNDLED_CLI_PROXY_API_ARCHIVE_BYTES.is_empty()
+    {
+        None
+    } else {
+        Some(version)
+    }
+}
+
+fn bundled_cliproxyapi_asset_name() -> Option<String> {
+    let asset_name = BUNDLED_CLI_PROXY_API_ASSET_NAME.trim();
+    if asset_name.is_empty() {
+        None
+    } else {
+        Some(asset_name.to_string())
+    }
+}
+
+fn bundled_webui_version() -> Option<String> {
+    let version = normalize_release_version(BUNDLED_WEBUI_VERSION);
+    if version.is_empty() || BUNDLED_MANAGEMENT_HTML.trim().is_empty() {
+        None
+    } else {
+        Some(version)
+    }
+}
+
+fn install_management_center_html_bytes(
+    html_bytes: &[u8],
+    latest: &str,
+) -> Result<PathBuf, AppError> {
+    let html_path = static_management_html_path()?;
+    if let Some(parent) = html_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&html_path, html_bytes)?;
+    fs::write(webui_version_path()?, latest)?;
+    let _ = patch_management_center_html();
+    Ok(html_path)
+}
+
+fn install_bundled_management_center_if_needed() -> Result<(), AppError> {
+    let Some(latest) = bundled_webui_version() else {
+        return Ok(());
+    };
+
+    let html_exists = static_management_html_path()?.exists();
+    let current = current_webui_version()?;
+    let needs_install = !html_exists
+        || current
+            .as_deref()
+            .map(|version| compare_versions(version, &latest) < 0)
+            .unwrap_or(true);
+
+    if needs_install {
+        let _ = install_management_center_html_bytes(BUNDLED_MANAGEMENT_HTML.as_bytes(), &latest)?;
+    } else {
+        let _ = patch_management_center_html();
+    }
+
+    Ok(())
+}
+
+fn cleanup_old_runtime_dirs(dir: &Path, latest: &str) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if let Ok(metadata) = entry.metadata() {
+                if metadata.is_dir() {
+                    let dir_name = entry.file_name();
+                    let dir_name_str = dir_name.to_string_lossy();
+                    if dir_name_str
+                        .chars()
+                        .next()
+                        .map(|character| character.is_ascii_digit())
+                        .unwrap_or(false)
+                        && dir_name_str != latest
+                    {
+                        let _ = fs::remove_dir_all(entry.path());
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn install_bundled_cliproxyapi_release(latest: &str) -> Result<PathBuf, AppError> {
+    let asset_name = bundled_cliproxyapi_asset_name()
+        .ok_or_else(|| AppError::Other("Bundled CLIProxyAPI asset metadata is missing".into()))?;
+    let dir = app_dir()?;
+    fs::create_dir_all(&dir)?;
+
+    let extract_path = dir.join(latest);
+    if extract_path.exists() {
+        let _ = fs::remove_dir_all(&extract_path);
+    }
+
+    extract_archive_bytes(
+        BUNDLED_CLI_PROXY_API_ARCHIVE_BYTES,
+        &asset_name,
+        &extract_path,
+    )?;
+    fs::write(dir.join("version.txt"), latest)?;
+    cleanup_old_runtime_dirs(&dir, latest);
+    ensure_config(&extract_path)?;
+
+    Ok(extract_path)
 }
 
 fn upsert_management_center_guard_script(html: &str) -> String {
@@ -968,16 +1191,7 @@ async fn download_management_center_release(
         .await?
         .error_for_status()?;
     let bytes = response.bytes().await?;
-
-    let html_path = static_management_html_path()?;
-    if let Some(parent) = html_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(&html_path, &bytes)?;
-    fs::write(webui_version_path()?, latest)?;
-    let _ = patch_management_center_html();
-
-    Ok(html_path)
+    install_management_center_html_bytes(&bytes, latest)
 }
 
 fn platform_archive_filename(version: &str) -> Result<String, AppError> {
@@ -1075,25 +1289,7 @@ async fn download_and_install_cliproxyapi_release(
 
     fs::write(dir.join("version.txt"), latest)?;
 
-    if let Ok(entries) = fs::read_dir(&dir) {
-        for entry in entries.flatten() {
-            if let Ok(metadata) = entry.metadata() {
-                if metadata.is_dir() {
-                    let dir_name = entry.file_name();
-                    let dir_name_str = dir_name.to_string_lossy();
-                    if dir_name_str
-                        .chars()
-                        .next()
-                        .map(|character| character.is_ascii_digit())
-                        .unwrap_or(false)
-                        && dir_name_str != latest
-                    {
-                        let _ = fs::remove_dir_all(entry.path());
-                    }
-                }
-            }
-        }
-    }
+    cleanup_old_runtime_dirs(&dir, latest);
 
     let _ = fs::remove_file(&download_path);
     ensure_config(&extract_path)?;
@@ -1115,10 +1311,22 @@ async fn ensure_latest_local_installation(
 ) -> Result<(String, PathBuf), AppError> {
     let dir = app_dir()?;
     fs::create_dir_all(&dir)?;
+    install_bundled_management_center_if_needed()?;
 
     if let Some((version, path)) = current_local_info()? {
+        if let Some(bundled_version) = bundled_cliproxyapi_version() {
+            if compare_versions(&version, &bundled_version) < 0 {
+                let extract_path = install_bundled_cliproxyapi_release(&bundled_version)?;
+                return Ok((bundled_version, extract_path));
+            }
+        }
         ensure_config(&path)?;
         return Ok((version, path));
+    }
+
+    if let Some(bundled_version) = bundled_cliproxyapi_version() {
+        let extract_path = install_bundled_cliproxyapi_release(&bundled_version)?;
+        return Ok((bundled_version, extract_path));
     }
 
     let release = fetch_latest_release(proxy_url.clone()).await?;
@@ -1128,50 +1336,79 @@ async fn ensure_latest_local_installation(
     Ok((latest, extract_path))
 }
 
-async fn wait_for_local_management_ui(port: u16) {
+async fn wait_for_local_management_ui(port: u16, timeout: Duration) -> bool {
     let url = local_management_url(port);
-    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    let deadline = std::time::Instant::now() + timeout;
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
         .build()
     {
         Ok(client) => client,
-        Err(_) => return,
+        Err(_) => return false,
     };
 
     while std::time::Instant::now() < deadline {
         if let Ok(response) = client.get(&url).send().await {
             if response.status().is_success() {
-                break;
+                if let Ok(body) = response.text().await {
+                    if is_management_center_response(&body) {
+                        return true;
+                    }
+                }
             }
         }
 
         sleep(Duration::from_millis(500)).await;
     }
+
+    false
+}
+
+async fn ensure_local_management_center_ready(
+    app: &tauri::AppHandle,
+) -> Result<(u16, bool), String> {
+    let _ = ensure_latest_local_installation(String::new())
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let port = current_local_service_port();
+    let password = current_management_key().map_err(|error| error.to_string())?;
+
+    if wait_for_local_management_ui(port, Duration::from_secs(2)).await {
+        let _ = attach_existing_local_service(app, port, &password);
+        let _ = patch_management_center_html();
+        return Ok((port, true));
+    }
+
+    let result = start_cliproxyapi(app.clone())?;
+    let runtime_port = current_local_service_port();
+    if !wait_for_local_management_ui(runtime_port, Duration::from_secs(20)).await {
+        return Err("本地服务启动超时".to_string());
+    }
+
+    let _ = patch_management_center_html();
+    Ok((
+        runtime_port,
+        result
+            .get("reused")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false),
+    ))
 }
 
 async fn open_local_management_center(app: tauri::AppHandle) -> Result<(), String> {
-    start_cliproxyapi(app.clone())?;
-    let port = current_local_service_port();
-    wait_for_local_management_ui(port).await;
-    let _ = patch_management_center_html();
+    let (port, _) = ensure_local_management_center_ready(&app).await?;
     open_external_target(&local_management_url(port)).map_err(|error| error.to_string())
 }
 
 async fn bootstrap_default_local_mode(app: tauri::AppHandle) -> Result<(), String> {
     let _ = create_tray(&app);
-    let _ = ensure_latest_local_installation(String::new())
-        .await
-        .map_err(|error| error.to_string())?;
 
     if let Some(main_window) = app.get_webview_window("main") {
         let _ = main_window.hide();
     }
 
-    start_cliproxyapi(app.clone())?;
-    let port = current_local_service_port();
-    wait_for_local_management_ui(port).await;
-    let _ = patch_management_center_html();
+    let _ = ensure_local_management_center_ready(&app).await?;
     open_settings_window(app)
 }
 
@@ -1269,11 +1506,6 @@ async fn check_version_and_download(
     }))
 }
 
-#[derive(Deserialize)]
-struct DownloadArgs {
-    proxy_url: Option<String>,
-}
-
 #[tauri::command]
 async fn download_cliproxyapi(
     window: tauri::Window,
@@ -1300,10 +1532,9 @@ async fn download_cliproxyapi(
     }))
 }
 
-fn extract_zip(zip_path: &Path, dest: &Path) -> Result<(), AppError> {
+fn extract_zip_reader<R: Read + io::Seek>(reader: R, dest: &Path) -> Result<(), AppError> {
     fs::create_dir_all(dest)?;
-    let file = fs::File::open(zip_path)?;
-    let mut archive = zip::ZipArchive::new(file)?;
+    let mut archive = zip::ZipArchive::new(reader)?;
     for i in 0..archive.len() {
         let mut f = archive.by_index(i)?;
         let outpath = dest.join(f.mangled_name());
@@ -1320,13 +1551,40 @@ fn extract_zip(zip_path: &Path, dest: &Path) -> Result<(), AppError> {
     Ok(())
 }
 
-fn extract_targz(tar_gz_path: &Path, dest: &Path) -> Result<(), AppError> {
+fn extract_zip(zip_path: &Path, dest: &Path) -> Result<(), AppError> {
+    let file = fs::File::open(zip_path)?;
+    extract_zip_reader(file, dest)
+}
+
+fn extract_targz_reader<R: Read>(reader: R, dest: &Path) -> Result<(), AppError> {
     fs::create_dir_all(dest)?;
-    let tar_gz = fs::File::open(tar_gz_path)?;
-    let dec = flate2::read::GzDecoder::new(tar_gz);
+    let dec = flate2::read::GzDecoder::new(reader);
     let mut archive = tar::Archive::new(dec);
     archive.unpack(dest)?;
     Ok(())
+}
+
+fn extract_targz(tar_gz_path: &Path, dest: &Path) -> Result<(), AppError> {
+    let tar_gz = fs::File::open(tar_gz_path)?;
+    extract_targz_reader(tar_gz, dest)
+}
+
+fn extract_archive_bytes(
+    archive_bytes: &[u8],
+    asset_name: &str,
+    dest: &Path,
+) -> Result<(), AppError> {
+    let lower_name = asset_name.to_ascii_lowercase();
+    if lower_name.ends_with(".zip") {
+        extract_zip_reader(Cursor::new(archive_bytes), dest)
+    } else if lower_name.ends_with(".tar.gz") || lower_name.ends_with(".tgz") {
+        extract_targz_reader(Cursor::new(archive_bytes), dest)
+    } else {
+        Err(AppError::Other(format!(
+            "Unsupported bundled archive format: {}",
+            asset_name
+        )))
+    }
 }
 
 #[tauri::command]
@@ -1401,13 +1659,6 @@ fn read_config_yaml() -> Result<serde_json::Value, String> {
     }
     let json_v = serde_json::to_value(v).map_err(|e| e.to_string())?;
     Ok(json_v)
-}
-
-#[derive(Deserialize)]
-struct UpdateConfigArgs {
-    endpoint: String,
-    value: serde_json::Value,
-    isDelete: Option<bool>,
 }
 
 #[tauri::command]
@@ -1631,179 +1882,10 @@ fn find_executable(version_path: &Path) -> Option<PathBuf> {
     }
 }
 
-fn start_monitor(app: tauri::AppHandle) {
-    let proc_ref = Arc::clone(&PROCESS);
-    thread::spawn(move || {
-        loop {
-            let mut remove = false;
-            let mut exit_code: Option<i32> = None;
-            {
-                let mut guard = proc_ref.lock();
-                if let Some(child) = guard.as_mut() {
-                    match child.try_wait() {
-                        Ok(Some(status)) => {
-                            exit_code = status.code();
-                            remove = true;
-                        }
-                        Ok(None) => {
-                            // Still running
-                        }
-                        Err(_) => {
-                            // Treat as closed
-                            remove = true;
-                        }
-                    }
-                } else {
-                    // No process
-                    break;
-                }
-            }
-            if remove {
-                // Clear stored process
-                *proc_ref.lock() = None;
-                // Stop keep-alive mechanism when process exits
-                stop_keep_alive_internal();
-                // Emit event
-                if let Some(code) = exit_code {
-                    println!("[CLIProxyAPI][EXIT] process exited with code {}", code);
-                } else {
-                    println!("[CLIProxyAPI][EXIT] process closed (no exit code)");
-                }
-                if let Some(code) = exit_code {
-                    let _ = app.emit("process-exit-error", json!({"code": code}));
-                } else {
-                    let _ = app.emit(
-                        "process-closed",
-                        json!({"message": "CLIProxyAPI process has closed"}),
-                    );
-                }
-                // Remove tray icon when process exits
-                let _ = TRAY_ICON.lock().take();
-                break;
-            }
-            thread::sleep(Duration::from_millis(1000));
-        }
-    });
-}
-
-fn pipe_child_output(child: &mut Child) {
-    // Pipe STDOUT
-    if let Some(out) = child.stdout.take() {
-        thread::spawn(move || {
-            let reader = BufReader::new(out);
-            for line in reader.lines() {
-                match line {
-                    Ok(l) => println!("[CLIProxyAPI][STDOUT] {}", l),
-                    Err(e) => {
-                        eprintln!("[CLIProxyAPI][STDOUT][ERROR] {}", e);
-                        break;
-                    }
-                }
-            }
-        });
-    }
-    // Pipe STDERR
-    if let Some(err) = child.stderr.take() {
-        thread::spawn(move || {
-            let reader = BufReader::new(err);
-            for line in reader.lines() {
-                match line {
-                    Ok(l) => eprintln!("[CLIProxyAPI][STDERR] {}", l),
-                    Err(e) => {
-                        eprintln!("[CLIProxyAPI][STDERR][ERROR] {}", e);
-                        break;
-                    }
-                }
-            }
-        });
-    }
-}
-
-// Kill any process using the specified port
-fn kill_process_on_port(port: u16) -> Result<(), String> {
-    println!("[PORT_CLEANUP] Checking port {}", port);
-
-    #[cfg(target_os = "macos")]
-    {
-        // Use lsof to find the process
-        let output = std::process::Command::new("lsof")
-            .args(["-ti", &format!(":{}", port)])
-            .output()
-            .map_err(|e| format!("Failed to run lsof: {}", e))?;
-
-        if output.status.success() {
-            let pids = String::from_utf8_lossy(&output.stdout);
-            for pid_str in pids.lines() {
-                if let Ok(pid) = pid_str.trim().parse::<i32>() {
-                    println!("[PORT_CLEANUP] Killing PID {} on port {}", pid, port);
-                    if let Err(e) = std::process::Command::new("kill")
-                        .args(["-9", &pid.to_string()])
-                        .output()
-                    {
-                        eprintln!("[PORT_CLEANUP] Failed to run kill for PID {}: {}", pid, e);
-                    }
-                }
-            }
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        // Use fuser to kill the process
-        let output = std::process::Command::new("fuser")
-            .args(["-k", "-9", &format!("{}/tcp", port)])
-            .output()
-            .map_err(|e| format!("Failed to run fuser: {}", e))?;
-
-        if output.status.success() {
-            println!("[PORT_CLEANUP] Killed processes on port {}", port);
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        // Use netstat to find the PID, then taskkill to kill it
-        let output = std::process::Command::new("netstat")
-            .args(["-ano"])
-            .output()
-            .map_err(|e| format!("Failed to run netstat: {}", e))?;
-
-        if output.status.success() {
-            let netstat_output = String::from_utf8_lossy(&output.stdout);
-            let port_pattern = format!(":{}", port);
-
-            for line in netstat_output.lines() {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() > 2
-                    && parts[1].ends_with(&port_pattern)
-                    && line.contains("LISTENING")
-                {
-                    // Extract PID from the last column
-                    if let Some(pid_str) = parts.last() {
-                        if let Ok(pid) = pid_str.parse::<i32>() {
-                            println!("[PORT_CLEANUP] Killing PID {} on port {}", pid, port);
-                            if let Err(e) = std::process::Command::new("taskkill")
-                                .args(["/F", "/PID", &pid.to_string()])
-                                .output()
-                            {
-                                eprintln!(
-                                    "[PORT_CLEANUP] Failed to run taskkill for PID {}: {}",
-                                    pid, e
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
 #[tauri::command]
 fn start_cliproxyapi(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let known_password = current_management_key().map_err(|e| e.to_string())?;
+    let port = current_local_service_port();
 
     // Check if already running by testing PID
     if let Some(pid) = *PROCESS_PID.lock() {
@@ -1814,10 +1896,11 @@ fn start_cliproxyapi(app: tauri::AppHandle) -> Result<serde_json::Value, String>
                 .output();
             if let Ok(output) = output {
                 if String::from_utf8_lossy(&output.stdout).contains(&pid.to_string()) {
-                    *CLI_PROXY_PASSWORD.lock() = Some(known_password.clone());
-                    return Ok(
-                        json!({"success": true, "message": "already running", "password": known_password}),
-                    );
+                    if is_local_management_ui_ready_now(port, Duration::from_millis(1200)) {
+                        *CLI_PROXY_PASSWORD.lock() = Some(known_password.clone());
+                        return Ok(attach_existing_local_service(&app, port, &known_password));
+                    }
+                    *PROCESS_PID.lock() = None;
                 }
             }
         }
@@ -1825,24 +1908,25 @@ fn start_cliproxyapi(app: tauri::AppHandle) -> Result<serde_json::Value, String>
         {
             unsafe {
                 if libc::kill(pid as i32, 0) == 0 {
-                    *CLI_PROXY_PASSWORD.lock() = Some(known_password.clone());
-                    return Ok(
-                        json!({"success": true, "message": "already running", "password": known_password}),
-                    );
+                    if is_local_management_ui_ready_now(port, Duration::from_millis(1200)) {
+                        *CLI_PROXY_PASSWORD.lock() = Some(known_password.clone());
+                        return Ok(attach_existing_local_service(&app, port, &known_password));
+                    }
+                    *PROCESS_PID.lock() = None;
                 }
             }
         }
     }
 
+    if is_local_management_ui_ready_now(port, Duration::from_millis(1200)) {
+        return Ok(attach_existing_local_service(&app, port, &known_password));
+    }
+
     let info = current_local_info().map_err(|e| e.to_string())?;
     let (_ver, path) = info.ok_or("Version file does not exist")?;
     let exec = find_executable(&path).ok_or("Executable file does not exist")?;
-    let (config, port, password) = prepare_launch_config(&path).map_err(|e| e.to_string())?;
-
-    // Automatic port cleanup
-    if let Err(e) = kill_process_on_port(port) {
-        eprintln!("[PORT_CLEANUP] Warning: {}", e);
-    }
+    let (config, runtime_port, password) =
+        prepare_launch_config(&path).map_err(|e| e.to_string())?;
 
     // Store the password for keep-alive authentication
     *CLI_PROXY_PASSWORD.lock() = Some(password.clone());
@@ -1894,12 +1978,7 @@ fn start_cliproxyapi(app: tauri::AppHandle) -> Result<serde_json::Value, String>
     let _ = create_tray(&app);
 
     // Start keep-alive mechanism for Local mode
-    let config = read_config_yaml().unwrap_or(json!({}));
-    let port = config
-        .get("port")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(DEFAULT_SERVICE_PORT as u64) as u16;
-    let _ = start_keep_alive(port);
+    let _ = start_keep_alive(runtime_port);
 
     Ok(json!({"success": true, "password": password}))
 }
@@ -1929,12 +2008,8 @@ fn restart_cliproxyapi(app: tauri::AppHandle) -> Result<(), String> {
     let info = current_local_info().map_err(|e| e.to_string())?;
     let (ver, path) = info.ok_or("Version file does not exist")?;
     let exec = find_executable(&path).ok_or("Executable file does not exist")?;
-    let (config, port, password) = prepare_launch_config(&path).map_err(|e| e.to_string())?;
-
-    // Automatic port cleanup
-    if let Err(e) = kill_process_on_port(port) {
-        eprintln!("[PORT_CLEANUP] Warning: {}", e);
-    }
+    let (config, runtime_port, password) =
+        prepare_launch_config(&path).map_err(|e| e.to_string())?;
 
     // Store the password for keep-alive authentication
     *CLI_PROXY_PASSWORD.lock() = Some(password.clone());
@@ -1981,28 +2056,12 @@ fn restart_cliproxyapi(app: tauri::AppHandle) -> Result<(), String> {
     std::mem::drop(child);
 
     // Start keep-alive mechanism for Local mode
-    let config = read_config_yaml().unwrap_or(json!({}));
-    let port = config
-        .get("port")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(DEFAULT_SERVICE_PORT as u64) as u16;
-    let _ = start_keep_alive(port);
+    let _ = start_keep_alive(runtime_port);
 
-    if let Some(w) = app.get_webview_window("main") {
+    if let Some(w) = app.get_webview_window("settings") {
         let _ = w.emit("cliproxyapi-restarted", json!({"version": ver}));
     }
     Ok(())
-}
-
-fn stop_process_internal() {
-    // Process is detached, don't try to kill it
-    // Just stop keep-alive mechanism
-    stop_keep_alive_internal();
-    // Clear stored password when app stops
-    *CLI_PROXY_PASSWORD.lock() = None;
-    println!(
-        "[CLIProxyAPI][INFO] EasyCLI app closing - CLIProxyAPI will continue running in background"
-    );
 }
 
 fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
@@ -2016,11 +2075,10 @@ fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     }
 
     let open_management = MenuItemBuilder::with_id("open_management", "打开管理中心").build(app)?;
-    let open_settings = MenuItemBuilder::with_id("open_settings", "打开主控制台").build(app)?;
-    let open_launcher = MenuItemBuilder::with_id("open_launcher", "打开启动器").build(app)?;
+    let open_settings = MenuItemBuilder::with_id("open_settings", "打开主控台").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
     let menu = MenuBuilder::new(app)
-        .items(&[&open_management, &open_settings, &open_launcher, &quit])
+        .items(&[&open_management, &open_settings, &quit])
         .build()?;
     let mut builder = TrayIconBuilder::new()
         .menu(&menu)
@@ -2035,9 +2093,6 @@ fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             }
             "open_settings" => {
                 let _ = open_settings_window(app.clone());
-            }
-            "open_launcher" => {
-                let _ = open_login_window(app.clone());
             }
             "quit" => {
                 // Just exit app - CLIProxyAPI continues running
@@ -2308,99 +2363,6 @@ fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn set_launcher_mode(win: &tauri::WebviewWindow, mode: &str) {
-    let encoded_mode = serde_json::to_string(mode).unwrap_or_else(|_| "\"manual\"".to_string());
-    let script = format!(
-        "window.__EASYCLI_LAUNCHER_MODE__ = {mode}; \
-         window.dispatchEvent(new CustomEvent('easycli-launcher-mode', {{ detail: {{ mode: {mode} }} }}));",
-        mode = encoded_mode
-    );
-    let _ = win.eval(script.as_str());
-}
-
-fn show_login_window_with_mode(app: tauri::AppHandle, mode: &str) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("main") {
-        set_launcher_mode(&win, mode);
-        let _ = win.show();
-        let _ = win.set_focus();
-        let app_cloned = app.clone();
-        tauri::async_runtime::spawn(async move {
-            sleep(Duration::from_millis(50)).await;
-            if let Some(settings) = app_cloned.get_webview_window("settings") {
-                let _ = settings.close();
-            }
-        });
-        return Ok(());
-    }
-
-    let login_url = if mode == "manual" {
-        "login.html#manual"
-    } else {
-        "login.html#auto-local"
-    };
-    let url = WebviewUrl::App(login_url.into());
-    let win = WebviewWindowBuilder::new(&app, "main", url)
-        .title("EasyCLI 启动器")
-        .inner_size(530.0, 380.0)
-        .resizable(false)
-        .build()
-        .map_err(|e| e.to_string())?;
-    set_launcher_mode(&win, mode);
-    let _ = win.show();
-    let _ = win.set_focus();
-
-    let app_cloned = app.clone();
-    tauri::async_runtime::spawn(async move {
-        sleep(Duration::from_millis(50)).await;
-        if let Some(settings) = app_cloned.get_webview_window("settings") {
-            let _ = settings.close();
-        }
-    });
-    Ok(())
-}
-
-#[tauri::command]
-fn open_login_window(app: tauri::AppHandle) -> Result<(), String> {
-    show_login_window_with_mode(app, "manual")
-    /*
-
-    // If login window already exists (predefined in config), show and focus it
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.show();
-        let _ = win.set_focus();
-        // Close settings window shortly after to ensure clean state
-        let app_cloned = app.clone();
-        tauri::async_runtime::spawn(async move {
-            sleep(Duration::from_millis(50)).await;
-            if let Some(settings) = app_cloned.get_webview_window("settings") {
-                let _ = settings.close();
-            }
-        });
-        return Ok(());
-    }
-
-    // Otherwise create the login window and close settings
-    let url = WebviewUrl::App("login.html".into());
-    let win = WebviewWindowBuilder::new(&app, "main", url)
-        .title("EasyCLI 启动器")
-        .inner_size(530.0, 380.0)
-        .resizable(false)
-        .build()
-        .map_err(|e| e.to_string())?;
-    let _ = win.show();
-    let _ = win.set_focus();
-
-    let app_cloned = app.clone();
-    tauri::async_runtime::spawn(async move {
-        sleep(Duration::from_millis(50)).await;
-        if let Some(settings) = app_cloned.get_webview_window("settings") {
-            let _ = settings.close();
-        }
-    });
-    Ok(())
-    */
-}
-
 #[tauri::command]
 fn get_agent_guide_path() -> Result<serde_json::Value, String> {
     let path = ensure_agent_guide_file().map_err(|e| e.to_string())?;
@@ -2435,9 +2397,68 @@ fn get_local_runtime_info() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
+async fn ensure_local_webui_ready(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let (port, reused) = ensure_local_management_center_ready(&app).await?;
+    let password = CLI_PROXY_PASSWORD
+        .lock()
+        .clone()
+        .or_else(|| current_management_key().ok())
+        .unwrap_or_else(|| DEFAULT_MANAGEMENT_SECRET_KEY.to_string());
+
+    Ok(json!({
+        "success": true,
+        "port": port,
+        "password": password,
+        "url": local_management_url(port),
+        "reused": reused,
+    }))
+}
+
+#[tauri::command]
+async fn restart_local_service_stack(
+    app: tauri::AppHandle,
+) -> Result<serde_json::Value, String> {
+    let _ = ensure_latest_local_installation(String::new())
+        .await
+        .map_err(|error| error.to_string())?;
+
+    restart_cliproxyapi(app.clone())?;
+
+    let port = current_local_service_port();
+    if !wait_for_local_management_ui(port, Duration::from_secs(20)).await {
+        return Err("本地服务重启超时".to_string());
+    }
+
+    let password = CLI_PROXY_PASSWORD
+        .lock()
+        .clone()
+        .or_else(|| current_management_key().ok())
+        .unwrap_or_else(|| DEFAULT_MANAGEMENT_SECRET_KEY.to_string());
+
+    let _ = patch_management_center_html();
+
+    Ok(json!({
+        "success": true,
+        "port": port,
+        "password": password,
+        "url": local_management_url(port),
+    }))
+}
+
+#[tauri::command]
+fn open_external_link(url: String) -> Result<serde_json::Value, String> {
+    open_external_target(&url).map_err(|error| error.to_string())?;
+
+    Ok(json!({
+        "success": true,
+        "url": url,
+    }))
+}
+
+#[tauri::command]
 async fn run_network_test() -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
-        .user_agent("EasyCLI/1.1.0")
+        .user_agent("EasyCLI/1.2.0")
         .timeout(Duration::from_secs(15))
         .build()
         .map_err(|e| format!("创建网络测试请求失败: {}", e))?;
@@ -2846,7 +2867,8 @@ fn main() {
 
                 if let Err(error) = bootstrap_default_local_mode(app_handle.clone()).await {
                     eprintln!("[STARTUP] auto local bootstrap failed: {}", error);
-                    let _ = show_login_window_with_mode(app_handle, "auto-local");
+                    let _ = create_tray(&app_handle);
+                    let _ = open_settings_window(app_handle);
                 }
             });
 
@@ -2895,10 +2917,12 @@ fn main() {
             restart_cliproxyapi,
             start_cliproxyapi,
             open_settings_window,
-            open_login_window,
             get_agent_guide_path,
             open_agent_guide_path,
+            open_external_link,
             get_local_runtime_info,
+            ensure_local_webui_ready,
+            restart_local_service_stack,
             run_network_test,
             check_component_updates,
             update_components_and_restart,

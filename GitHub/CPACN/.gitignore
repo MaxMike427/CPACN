@@ -1,0 +1,8 @@
+node_modules/
+src-tauri/target/
+out/
+dist-web/
+src-tauri/logs/
+.serena/
+AGENTS.md
+CLAUDE.md

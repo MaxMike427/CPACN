@@ -43,6 +43,9 @@
         <div class="server-status-container">
             <div class="server-status-content">
                 <span class="server-status-text" id="server-status-text">Local</span>
+                <div class="server-status-actions">
+                    <button class="server-restart-btn" id="restart-service-btn" type="button">重启服务</button>
+                </div>
             </div>
         </div>
     </div>
@@ -56,11 +59,11 @@
                     <div class="setting-item local-only" id="port-setting">
                         <div class="setting-label">
                             <label for="port-input">Port</label>
-                            <span class="setting-description">Server port number (default: 8080)</span>
+                            <span class="setting-description" id="port-description">服务端口号（当前：正在读取...）</span>
                         </div>
                         <div class="setting-control">
                             <input type="number" id="port-input" class="number-input" min="1" max="65535"
-                                placeholder="8080">
+                                placeholder="正在读取当前端口">
                         </div>
                     </div>
 

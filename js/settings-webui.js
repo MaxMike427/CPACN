@@ -425,12 +425,22 @@ async function invokeTauri(command, args = {}) {
 }
 
 async function openExternalUrl(url) {
+    if (window.__TAURI__?.core?.invoke) {
+        const result = await invokeTauri('open_external_link', { url });
+        if (result?.success) {
+            return;
+        }
+    }
+
     if (window.__TAURI__?.shell?.open) {
         await window.__TAURI__.shell.open(url);
         return;
     }
 
-    window.open(url, '_blank', 'noopener');
+    const popup = window.open(url, '_blank', 'noopener');
+    if (!popup) {
+        window.location.href = url;
+    }
 }
 
 function bindButtonOnce(id, handler) {
@@ -478,6 +488,52 @@ async function getCurrentWebuiUrl() {
     }
 
     return `${remoteBaseUrl}/management.html`;
+}
+
+async function ensureLocalWebuiUrl() {
+    if (window.__TAURI__?.core?.invoke) {
+        const runtimeInfo = await invokeTauri('ensure_local_webui_ready');
+        if (runtimeInfo?.password) {
+            localStorage.setItem('local-management-key', runtimeInfo.password);
+        }
+        if (runtimeInfo?.url) {
+            return runtimeInfo.url;
+        }
+        if (runtimeInfo?.port) {
+            return `http://127.0.0.1:${runtimeInfo.port}/management.html`;
+        }
+    }
+
+    return getCurrentWebuiUrl();
+}
+
+async function restartLocalWebuiUrl() {
+    if (window.restartLocalServiceStackFromCore) {
+        const runtimeInfo = await window.restartLocalServiceStackFromCore({
+            showSuccessToast: false
+        });
+        if (runtimeInfo?.url) {
+            return runtimeInfo.url;
+        }
+        if (runtimeInfo?.port) {
+            return `http://127.0.0.1:${runtimeInfo.port}/management.html`;
+        }
+    }
+
+    if (window.__TAURI__?.core?.invoke) {
+        const runtimeInfo = await invokeTauri('restart_local_service_stack');
+        if (runtimeInfo?.password) {
+            localStorage.setItem('local-management-key', runtimeInfo.password);
+        }
+        if (runtimeInfo?.url) {
+            return runtimeInfo.url;
+        }
+        if (runtimeInfo?.port) {
+            return `http://127.0.0.1:${runtimeInfo.port}/management.html`;
+        }
+    }
+
+    return getCurrentWebuiUrl();
 }
 
 function getNetworkTestValueMap() {
@@ -652,7 +708,10 @@ async function refreshProjectLinkPanel() {
 
 async function handleOpenWebui() {
     try {
-        const webuiUrl = await getCurrentWebuiUrl();
+        const connectionType = localStorage.getItem('type') || 'local';
+        const webuiUrl = connectionType === 'local'
+            ? await ensureLocalWebuiUrl()
+            : await getCurrentWebuiUrl();
         const urlText = getCurrentWebuiUrlText();
         if (urlText) {
             urlText.textContent = webuiUrl;
@@ -765,6 +824,43 @@ async function handleOpenProjectLink() {
     } catch (error) {
         console.error('Failed to open project link:', error);
         showError('打开项目地址失败');
+    }
+}
+
+async function handleOpenWebui() {
+    const connectionType = localStorage.getItem('type') || 'local';
+
+    try {
+        const webuiUrl = connectionType === 'local'
+            ? await ensureLocalWebuiUrl()
+            : await getCurrentWebuiUrl();
+        const urlText = getCurrentWebuiUrlText();
+        if (urlText) {
+            urlText.textContent = webuiUrl;
+        }
+        await openExternalUrl(webuiUrl);
+        showSuccessMessage('已在浏览器中打开 WebUI');
+    } catch (error) {
+        console.error('Failed to open WebUI:', error);
+
+        if (connectionType === 'local') {
+            try {
+                const recoveredUrl = await restartLocalWebuiUrl();
+                const urlText = getCurrentWebuiUrlText();
+                if (urlText) {
+                    urlText.textContent = recoveredUrl;
+                }
+                await openExternalUrl(recoveredUrl);
+                showSuccessMessage('本地服务已重启，并在浏览器中打开 WebUI');
+                return;
+            } catch (restartError) {
+                console.error('Failed to recover local WebUI:', restartError);
+                showError(restartError?.message || error?.message || '打开 WebUI 失败');
+                return;
+            }
+        }
+
+        showError(error?.message || '打开 WebUI 失败');
     }
 }
 

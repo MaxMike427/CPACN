@@ -38,13 +38,12 @@ const root = path.resolve(__dirname, '..');
 const outDir = path.join(root, 'dist-web');
 
 // initial sync
-for (const p of ['login.html', 'settings.html', 'css', 'js', 'images']) {
+for (const p of ['settings.html', 'css', 'js', 'images']) {
   copyRecursive(path.join(root, p), path.join(outDir, p));
 }
 console.log('[watch] initial sync complete ->', outDir);
 
 const watcher = chokidar.watch([
-  path.join(root, 'login.html'),
   path.join(root, 'settings.html'),
   path.join(root, 'css'),
   path.join(root, 'js'),

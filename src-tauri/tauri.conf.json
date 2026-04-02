@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "EasyCLI",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "identifier": "com.example.easycli",
   "build": {
     "beforeBuildCommand": "node src-tauri/prepare-web.js",
@@ -19,18 +19,8 @@
     },
     "windows": [
       {
-        "label": "main",
-        "title": "EasyCLI 启动器",
-        "width": 530,
-        "height": 380,
-        "resizable": false,
-        "dragDropEnabled": true,
-        "visible": false,
-        "url": "login.html"
-      },
-      {
         "label": "settings",
-        "title": "EasyCLI 控制台",
+        "title": "EasyCLI 主控台",
         "width": 930,
         "height": 600,
         "resizable": false,
