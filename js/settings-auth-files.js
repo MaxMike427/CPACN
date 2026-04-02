@@ -109,7 +109,12 @@ function updateActionButtons() {
         deleteBtn.style.display = 'none';
         newDropdown.style.display = 'none';
         downloadBtn.style.display = 'none';
-    } else if (currentTab === 'webui' || currentTab === 'network-test') {
+    } else if (
+        currentTab === 'webui' ||
+        currentTab === 'network-test' ||
+        currentTab === 'component-update' ||
+        currentTab === 'project-link'
+    ) {
         resetBtn.style.display = 'none';
         applyBtn.style.display = 'none';
         selectAllBtn.style.display = 'none';

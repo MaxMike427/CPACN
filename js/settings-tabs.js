@@ -30,6 +30,12 @@ tabs.forEach(tab => {
         if (tabId === 'network-test' && typeof refreshNetworkTestPanel === 'function') {
             await refreshNetworkTestPanel();
         }
+        if (tabId === 'component-update' && typeof refreshComponentUpdatePanel === 'function') {
+            await refreshComponentUpdatePanel();
+        }
+        if (tabId === 'project-link' && typeof refreshProjectLinkPanel === 'function') {
+            await refreshProjectLinkPanel();
+        }
 
         updateActionButtons();
     });

@@ -372,6 +372,136 @@ body {
     word-break: break-all;
 }
 
+.component-update-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.component-update-status {
+    font-size: 13px;
+    color: #475569;
+    line-height: 1.6;
+}
+
+.component-update-status.loading {
+    color: #1d4ed8;
+}
+
+.component-update-status.success {
+    color: #047857;
+}
+
+.component-update-status.warning {
+    color: #b45309;
+}
+
+.component-update-status.error {
+    color: #b91c1c;
+}
+
+.component-update-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.component-update-card {
+    gap: 14px;
+}
+
+.component-update-card-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.component-update-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 12px;
+}
+
+.component-update-label {
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.component-update-value {
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: right;
+    word-break: break-word;
+}
+
+.component-update-note {
+    color: #92400e;
+    font-size: 13px;
+    line-height: 1.7;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    padding: 12px 14px;
+}
+
+.component-risk-list {
+    margin: 0;
+    padding-left: 18px;
+    color: #334155;
+    line-height: 1.8;
+}
+
+.component-update-modal-content {
+    max-width: 720px;
+}
+
+.component-update-modal-summary,
+.component-update-modal-risk {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.component-update-modal-risk {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.component-update-summary-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.component-update-summary-list {
+    margin: 0;
+    padding-left: 18px;
+    color: #334155;
+    line-height: 1.8;
+}
+
+.component-update-summary-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.component-update-summary-list strong {
+    color: #0f172a;
+}
+
+.component-update-modal-risk p {
+    margin: 0;
+    color: #475569;
+    line-height: 1.8;
+}
+
 .setting-item {
     display: flex;
     justify-content: space-between;
@@ -1005,8 +1135,18 @@ body {
         grid-template-columns: 1fr;
     }
 
+    .component-update-grid {
+        grid-template-columns: 1fr;
+    }
+
     .network-test-item.full-width {
         grid-column: auto;
+    }
+
+    .component-update-summary-list li,
+    .component-update-row {
+        flex-direction: column;
+        align-items: flex-start;
     }
 }
 

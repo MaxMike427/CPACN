@@ -48,6 +48,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             await refreshWebuiPanel();
         } else if (currentTab === 'network-test' && typeof refreshNetworkTestPanel === 'function') {
             await refreshNetworkTestPanel();
+        } else if (currentTab === 'component-update' && typeof refreshComponentUpdatePanel === 'function') {
+            await refreshComponentUpdatePanel();
+        } else if (currentTab === 'project-link' && typeof refreshProjectLinkPanel === 'function') {
+            await refreshProjectLinkPanel();
         } else if (currentTab === 'api') {
             await loadAllApiKeys();
         } else if (currentTab === 'openai') {
