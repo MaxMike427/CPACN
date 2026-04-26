@@ -1350,6 +1350,16 @@ body {
     border-color: #dc2626;
 }
 
+.api-key-btn.use {
+    color: #0f766e;
+}
+
+.api-key-btn.use:hover {
+    background: #ecfeff;
+    border-color: #14b8a6;
+    color: #0f766e;
+}
+
 /* Modal Styles */
 .modal {
     position: fixed;
@@ -2031,6 +2041,455 @@ textarea.form-input {
 #codex-auth-modal .modal-content {
     max-width: 600px;
     min-height: 300px;
+}
+
+#access-token-usage-modal .modal-content {
+    max-width: 760px;
+    min-height: 640px;
+    background: #1e293b;
+    color: #e5eefc;
+    border: 1px solid #334155;
+    display: flex;
+    flex-direction: column;
+}
+
+.access-token-usage-modal-header {
+    border-bottom: 1px solid #334155;
+}
+
+.access-token-usage-modal-header .modal-title,
+.access-token-usage-modal-header .modal-close {
+    color: #f8fafc;
+}
+
+.access-token-usage-modal-body {
+    padding: 20px 24px 96px 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.access-token-usage-actions {
+    background: #1e293b;
+    border-top: 1px solid #334155;
+}
+
+.usage-tabs,
+.usage-platform-tabs {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid #334155;
+    padding-bottom: 12px;
+}
+
+.usage-tab,
+.usage-platform-tab {
+    background: transparent;
+    border: none;
+    color: #cbd5e1;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 6px 4px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.usage-tab:hover,
+.usage-platform-tab:hover {
+    color: #f8fafc;
+}
+
+.usage-tab.active,
+.usage-platform-tab.active {
+    color: #22d3ee;
+    border-bottom-color: #22d3ee;
+}
+
+.usage-intro {
+    color: #cbd5e1;
+    font-size: 14px;
+    line-height: 1.7;
+}
+
+.usage-section-title {
+    color: #f8fafc;
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: 8px;
+}
+
+.usage-note {
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+.usage-note.warning {
+    background: rgba(234, 179, 8, 0.12);
+    color: #fde68a;
+    border: 1px solid rgba(234, 179, 8, 0.25);
+}
+
+.usage-note.info {
+    background: rgba(59, 130, 246, 0.12);
+    color: #bfdbfe;
+    border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.usage-code-block {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.usage-code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #334155;
+    background: rgba(30, 41, 59, 0.92);
+}
+
+.usage-file-path {
+    color: #94a3b8;
+    font-size: 12px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    word-break: break-all;
+}
+
+.usage-copy-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+.usage-code-pre {
+    margin: 0;
+    padding: 16px;
+    max-height: 330px;
+    overflow: auto;
+    color: #e2e8f0;
+    font-size: 13px;
+    line-height: 1.65;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+html[data-theme-resolved="light"] {
+    --theme-bg: #ffffff;
+    --theme-surface: #f9f9f9;
+    --theme-surface-alt: #ffffff;
+    --theme-surface-soft: #f3f4f6;
+    --theme-sidebar: #f9f9f9;
+    --theme-border: #e0e0e0;
+    --theme-border-strong: #dbe4f0;
+    --theme-text: #0f172a;
+    --theme-text-muted: #6b7280;
+    --theme-accent: #8b5cf6;
+    --theme-accent-strong: #7c3aed;
+    --theme-accent-soft: #f3e8ff;
+    --theme-success: #10b981;
+    --theme-shadow: 0 12px 24px rgba(15, 23, 42, 0.04);
+    --theme-usage-bg: #ffffff;
+    --theme-usage-panel: #f8fafc;
+    --theme-code-bg: #0f172a;
+    --theme-code-text: #e2e8f0;
+    --theme-info-bg: rgba(59, 130, 246, 0.12);
+    --theme-info-text: #1d4ed8;
+    --theme-warning-bg: rgba(234, 179, 8, 0.12);
+    --theme-warning-text: #b45309;
+}
+
+html[data-theme-resolved="dark"] {
+    --theme-bg: #0b1220;
+    --theme-surface: #111827;
+    --theme-surface-alt: #172033;
+    --theme-surface-soft: #0f172a;
+    --theme-sidebar: #0f172a;
+    --theme-border: #334155;
+    --theme-border-strong: #475569;
+    --theme-text: #f8fafc;
+    --theme-text-muted: #94a3b8;
+    --theme-accent: #38bdf8;
+    --theme-accent-strong: #0ea5e9;
+    --theme-accent-soft: rgba(56, 189, 248, 0.14);
+    --theme-success: #34d399;
+    --theme-shadow: 0 20px 40px rgba(2, 6, 23, 0.45);
+    --theme-usage-bg: #111827;
+    --theme-usage-panel: #1e293b;
+    --theme-code-bg: #0f172a;
+    --theme-code-text: #e2e8f0;
+    --theme-info-bg: rgba(59, 130, 246, 0.16);
+    --theme-info-text: #bfdbfe;
+    --theme-warning-bg: rgba(245, 158, 11, 0.16);
+    --theme-warning-text: #fde68a;
+}
+
+html[data-theme-resolved] body {
+    background: var(--theme-bg) !important;
+    color: var(--theme-text) !important;
+}
+
+html[data-theme-resolved] .sidebar,
+html[data-theme-resolved] .server-status-container,
+html[data-theme-resolved] .settings-form,
+html[data-theme-resolved] .webui-card,
+html[data-theme-resolved] .auth-files-list,
+html[data-theme-resolved] .api-section,
+html[data-theme-resolved] .api-key-item,
+html[data-theme-resolved] .openai-provider-item,
+html[data-theme-resolved] .network-test-item,
+html[data-theme-resolved] .component-update-card,
+html[data-theme-resolved] .modal-content,
+html[data-theme-resolved] .action-bar,
+html[data-theme-resolved] .auth-file-item,
+html[data-theme-resolved] .webui-link,
+html[data-theme-resolved] .number-input,
+html[data-theme-resolved] .proxy-input,
+html[data-theme-resolved] .form-input,
+html[data-theme-resolved] textarea.form-input,
+html[data-theme-resolved] .clear-btn {
+    background: var(--theme-surface) !important;
+    color: var(--theme-text) !important;
+    border-color: var(--theme-border) !important;
+}
+
+html[data-theme-resolved] .sidebar {
+    background: var(--theme-sidebar) !important;
+}
+
+html[data-theme-resolved] .sidebar-header,
+html[data-theme-resolved] .server-status-container,
+html[data-theme-resolved] .modal-header,
+html[data-theme-resolved] .form-actions,
+html[data-theme-resolved] .usage-tabs,
+html[data-theme-resolved] .usage-platform-tabs,
+html[data-theme-resolved] .usage-code-header {
+    border-color: var(--theme-border) !important;
+}
+
+html[data-theme-resolved] .sidebar-title,
+html[data-theme-resolved] .webui-card-title,
+html[data-theme-resolved] .setting-label label,
+html[data-theme-resolved] .api-section-title,
+html[data-theme-resolved] .api-key-value,
+html[data-theme-resolved] .component-update-card-title,
+html[data-theme-resolved] .component-update-value,
+html[data-theme-resolved] .network-test-value,
+html[data-theme-resolved] .modal-title,
+html[data-theme-resolved] .usage-section-title {
+    color: var(--theme-text) !important;
+}
+
+html[data-theme-resolved] .server-status-text,
+html[data-theme-resolved] .setting-label .setting-description,
+html[data-theme-resolved] .webui-card-description,
+html[data-theme-resolved] .webui-meta-label,
+html[data-theme-resolved] .webui-meta-value,
+html[data-theme-resolved] .network-test-label,
+html[data-theme-resolved] .component-update-label,
+html[data-theme-resolved] .component-update-status,
+html[data-theme-resolved] .component-update-note,
+html[data-theme-resolved] .api-key-base-url,
+html[data-theme-resolved] .auth-files-description,
+html[data-theme-resolved] .empty-state,
+html[data-theme-resolved] .empty-state-text,
+html[data-theme-resolved] .empty-state-subtitle,
+html[data-theme-resolved] .usage-intro,
+html[data-theme-resolved] .usage-file-path {
+    color: var(--theme-text-muted) !important;
+}
+
+html[data-theme-resolved] .tab {
+    color: var(--theme-text-muted) !important;
+}
+
+html[data-theme-resolved] .tab:hover,
+html[data-theme-resolved] .tab.active {
+    background: var(--theme-accent-soft) !important;
+    color: var(--theme-accent) !important;
+    border-left-color: var(--theme-accent) !important;
+}
+
+html[data-theme-resolved] .webui-badge,
+html[data-theme-resolved] .switch-input:checked + .switch-slider,
+html[data-theme-resolved] .btn-save,
+html[data-theme-resolved] .btn-primary,
+html[data-theme-resolved] .apply-btn {
+    background: var(--theme-accent) !important;
+    color: #ffffff !important;
+}
+
+html[data-theme-resolved] .webui-action-btn.primary {
+    background: linear-gradient(135deg, var(--theme-accent), var(--theme-accent-strong)) !important;
+    color: #ffffff !important;
+}
+
+html[data-theme-resolved] .server-restart-btn,
+html[data-theme-resolved] .server-theme-btn {
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+html[data-theme-resolved="dark"] .server-restart-btn {
+    background: var(--theme-surface-alt) !important;
+    color: #ffffff !important;
+    border: 1px solid var(--theme-border) !important;
+}
+
+html[data-theme-resolved="light"] .server-restart-btn {
+    background: transparent !important;
+    color: var(--theme-accent) !important;
+    border: 1px solid #d8b4fe !important;
+}
+
+.server-theme-btn {
+    border: 1px solid var(--theme-border, #334155);
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.server-theme-btn.theme-mode-dark {
+    background: #111827;
+    color: #ffffff;
+}
+
+.server-theme-btn.theme-mode-light {
+    background: #ffffff;
+    color: #0f172a;
+}
+
+.server-theme-btn.theme-mode-auto {
+    background: transparent;
+    color: var(--theme-text, #0f172a);
+}
+
+html[data-theme-resolved] .usage-code-block {
+    background: var(--theme-code-bg) !important;
+    border-color: var(--theme-border) !important;
+}
+
+html[data-theme-resolved] .usage-code-pre {
+    color: var(--theme-code-text) !important;
+}
+
+html[data-theme-resolved] #access-token-usage-modal .modal-content {
+    background: var(--theme-usage-panel) !important;
+    color: var(--theme-text) !important;
+    border-color: var(--theme-border) !important;
+}
+
+html[data-theme-resolved] .usage-note.warning {
+    background: var(--theme-warning-bg) !important;
+    color: var(--theme-warning-text) !important;
+}
+
+html[data-theme-resolved] .usage-note.info {
+    background: var(--theme-info-bg) !important;
+    color: var(--theme-info-text) !important;
+}
+
+html[data-theme-resolved] .copy-btn {
+    background: var(--theme-surface-alt) !important;
+    color: var(--theme-text) !important;
+    border: 1px solid var(--theme-border) !important;
+}
+
+html[data-theme-resolved] .api-section-header {
+    background: var(--theme-surface-alt) !important;
+    border-bottom: 1px solid var(--theme-border) !important;
+}
+
+html[data-theme-resolved] .api-section-header .api-section-title {
+    color: var(--theme-text) !important;
+}
+
+html[data-theme-resolved] .api-section-header .api-section-description {
+    color: var(--theme-text-muted) !important;
+}
+
+html[data-theme-resolved] .openai-section {
+    background: var(--theme-surface) !important;
+    border-color: var(--theme-border) !important;
+}
+
+html[data-theme-resolved] .openai-section-header {
+    background: var(--theme-surface-alt) !important;
+    border-bottom: 1px solid var(--theme-border) !important;
+}
+
+html[data-theme-resolved] .openai-section-title {
+    color: var(--theme-text) !important;
+}
+
+html[data-theme-resolved] .openai-providers-list {
+    background: transparent !important;
+}
+
+html[data-theme-resolved] .openai-provider-item {
+    background: var(--theme-surface-alt) !important;
+    border-color: var(--theme-border) !important;
+}
+
+html[data-theme-resolved] .openai-provider-item:hover {
+    background: var(--theme-accent-soft) !important;
+    border-color: var(--theme-accent) !important;
+}
+
+html[data-theme-resolved] .openai-provider-name,
+html[data-theme-resolved] .openai-provider-detail strong {
+    color: var(--theme-text) !important;
+}
+
+html[data-theme-resolved] .openai-provider-base-url,
+html[data-theme-resolved] .openai-provider-detail {
+    color: var(--theme-text-muted) !important;
+}
+
+html[data-theme-resolved] .openai-provider-btn {
+    border-color: var(--theme-border) !important;
+    background: transparent !important;
+    color: var(--theme-text) !important;
+}
+
+html[data-theme-resolved] .openai-provider-btn:hover {
+    background: var(--theme-accent-soft) !important;
+    border-color: var(--theme-accent) !important;
+    color: var(--theme-accent) !important;
+}
+
+html[data-theme-resolved] .openai-provider-btn.edit {
+    color: #60a5fa !important;
+}
+
+html[data-theme-resolved] .openai-provider-btn.delete {
+    color: #f87171 !important;
+}
+
+html[data-theme-resolved] #openai-provider-modal .modal-content {
+    background: var(--theme-surface) !important;
+    border-color: var(--theme-border) !important;
+}
+
+html[data-theme-resolved] #openai-provider-modal .modal-header,
+html[data-theme-resolved] #openai-provider-modal .form-actions {
+    background: var(--theme-surface-alt) !important;
+    border-color: var(--theme-border) !important;
+}
+
+html[data-theme-resolved] #openai-provider-modal .modal-title,
+html[data-theme-resolved] #openai-provider-modal label {
+    color: var(--theme-text) !important;
 }
 
 /* Authentication Status Styles */

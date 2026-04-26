@@ -1,1 +1,0 @@
-CLIProxyAPI_6.9.38_windows_amd64.zip

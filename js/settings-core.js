@@ -373,6 +373,13 @@ async function applyAllSettings() {
                 changes.push({ endpoint: 'quota-exceeded/switch-preview-model', value: switchPreviewModelSwitch.checked });
             }
         } else if (currentTab === 'access-token') {
+            accessTokenKeys = typeof normalizeAccessTokenKeys === 'function'
+                ? normalizeAccessTokenKeys(accessTokenKeys)
+                : accessTokenKeys;
+            if (!Array.isArray(accessTokenKeys) || accessTokenKeys.length === 0) {
+                showError('至少保留一个访问令牌');
+                return;
+            }
             let serverApiKeys = serverConfig['api-keys'] || [];
             if (serverApiKeys === null) serverApiKeys = [];
             if (JSON.stringify(accessTokenKeys) !== JSON.stringify(serverApiKeys)) {
@@ -536,3 +543,173 @@ resetBtn.addEventListener('click', resetAllSettings);
 if (restartServiceBtn) {
     restartServiceBtn.addEventListener('click', handleRestartServiceClick);
 }
+
+function updatePortDescription(port) {
+    const currentPort = Number(port) > 0 ? Number(port) : 8080;
+
+    if (portDescription) {
+        portDescription.textContent = `服务端口号（当前：${currentPort}）`;
+    }
+
+    if (portInput) {
+        portInput.placeholder = String(currentPort);
+    }
+}
+
+function updateServerStatus() {
+    const connectionType = localStorage.getItem('type') || 'local';
+
+    if (connectionType === 'local') {
+        serverStatusText.innerHTML = '<span style="color: #10b981;">&#9679;</span> 本地';
+        if (restartServiceBtn) {
+            restartServiceBtn.style.display = 'inline-flex';
+        }
+        return;
+    }
+
+    configManager.refreshConnection();
+    const storedBaseUrl = localStorage.getItem('base-url');
+    const baseUrl = storedBaseUrl || configManager.baseUrl;
+
+    if (baseUrl) {
+        serverStatusText.innerHTML = `远程：<br><span style="color: #10b981;">&#9679;</span> ${baseUrl}`;
+    } else {
+        serverStatusText.innerHTML = '远程：<br><span style="color: #10b981;">&#9679;</span> 未知地址';
+    }
+
+    if (restartServiceBtn) {
+        restartServiceBtn.style.display = 'none';
+    }
+}
+
+function setRestartServiceButtonLoading(isLoading) {
+    if (!restartServiceBtn) {
+        return;
+    }
+
+    restartServiceBtn.disabled = isLoading;
+    restartServiceBtn.textContent = isLoading ? '重启中...' : '重启服务';
+}
+
+async function restartLocalServiceStackFromCore(options = {}) {
+    const { showSuccessToast = true, successMessage = '本地服务已重启' } = options;
+
+    if (restartServiceInProgress) {
+        return null;
+    }
+
+    if (!window.__TAURI__?.core?.invoke) {
+        throw new Error('当前环境不支持重启服务');
+    }
+
+    restartServiceInProgress = true;
+    setRestartServiceButtonLoading(true);
+
+    try {
+        const result = await window.__TAURI__.core.invoke('restart_local_service_stack');
+
+        if (result?.password) {
+            localStorage.setItem('local-management-key', result.password);
+        }
+        if (result?.port && portInput) {
+            portInput.value = result.port;
+            updatePortDescription(result.port);
+        }
+        const webuiUrlText = document.getElementById('webui-url-text');
+        if (result?.url && webuiUrlText) {
+            webuiUrlText.textContent = result.url;
+        }
+
+        if (typeof refreshWebuiPanel === 'function') {
+            await refreshWebuiPanel();
+        }
+
+        updateServerStatus();
+
+        if (showSuccessToast) {
+            showSuccessMessage(successMessage);
+        }
+
+        return result;
+    } finally {
+        restartServiceInProgress = false;
+        setRestartServiceButtonLoading(false);
+    }
+}
+
+async function handleRestartServiceClick() {
+    try {
+        await restartLocalServiceStackFromCore();
+    } catch (error) {
+        console.error('Error restarting local service:', error);
+        showError(error?.message || '重启服务失败');
+    }
+}
+
+window.restartLocalServiceStackFromCore = restartLocalServiceStackFromCore;
+
+function setRestartServiceButtonLoading(isLoading) {
+    if (!restartServiceBtn) {
+        return;
+    }
+
+    restartServiceBtn.disabled = isLoading;
+    restartServiceBtn.textContent = isLoading ? '重启中...' : '重启服务';
+}
+
+async function restartLocalServiceStackFromCore(options = {}) {
+    const { showSuccessToast = true, successMessage = '本地服务已重启' } = options;
+
+    if (restartServiceInProgress) {
+        return null;
+    }
+
+    if (!window.__TAURI__?.core?.invoke) {
+        throw new Error('当前环境不支持重启服务');
+    }
+
+    restartServiceInProgress = true;
+    setRestartServiceButtonLoading(true);
+
+    try {
+        const result = await window.__TAURI__.core.invoke('restart_local_service_stack');
+
+        if (result?.password) {
+            localStorage.setItem('local-management-key', result.password);
+        }
+        if (result?.port && portInput) {
+            portInput.value = result.port;
+            updatePortDescription(result.port);
+        }
+        const webuiUrlText = document.getElementById('webui-url-text');
+        if (result?.url && webuiUrlText) {
+            webuiUrlText.textContent = result.url;
+        }
+
+        if (typeof refreshWebuiPanel === 'function') {
+            await refreshWebuiPanel();
+        }
+
+        updateServerStatus();
+
+        if (showSuccessToast) {
+            showSuccessMessage(successMessage);
+        }
+
+        return result;
+    } finally {
+        restartServiceInProgress = false;
+        setRestartServiceButtonLoading(false);
+    }
+}
+
+async function handleRestartServiceClick() {
+    try {
+        await restartLocalServiceStackFromCore();
+    } catch (error) {
+        console.error('Error restarting local service:', error);
+        showError(error?.message || '重启服务失败');
+    }
+}
+
+window.restartLocalServiceStackFromCore = restartLocalServiceStackFromCore;

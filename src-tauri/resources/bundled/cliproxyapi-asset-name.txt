@@ -1,1 +1,1 @@
-CLIProxyAPI_6.9.8_windows_amd64.zip
+CLIProxyAPI_6.9.38_windows_amd64.zip

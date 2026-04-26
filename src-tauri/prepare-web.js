@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const USER_AGENT = 'EasyCLI/1.1.1';
+const USER_AGENT = 'EasyCLI/2.0.0';
 const CLI_RELEASE_API_URL = 'https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/latest';
 const WEBUI_RELEASE_API_URL = 'https://api.github.com/repos/router-for-me/Cli-Proxy-API-Management-Center/releases/latest';
 

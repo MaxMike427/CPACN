@@ -15,8 +15,6 @@ allow = [
   "restart_cliproxyapi",
   "start_cliproxyapi",
   "open_settings_window",
-  "get_agent_guide_path",
-  "open_agent_guide_path",
   "open_external_link",
   "get_local_runtime_info",
   "ensure_local_webui_ready",
