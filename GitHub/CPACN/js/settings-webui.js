@@ -56,11 +56,11 @@ function normalizeManagementBaseUrl(input) {
 function syncSidebarLabels() {
     const labelMap = {
         basic: '基础设置',
-        webui: 'WebUI 与教程',
+        webui: 'WebUI',
         'network-test': '网络测试',
         'component-update': '组件更新',
         'project-link': '项目地址',
-        'access-token': '访问令牌',
+        'access-token': '接入教程',
         auth: '认证文件',
         api: '第三方 API Keys',
         openai: 'OpenAI 兼容'
@@ -464,8 +464,30 @@ function getCurrentWebuiUrlText() {
     return document.getElementById('webui-url-text');
 }
 
-function getAgentGuidePathText() {
-    return document.getElementById('agent-guide-path-text');
+function getWebuiDefaultConfigText() {
+    return document.querySelector('#webui-content .webui-meta .webui-meta-item .webui-meta-value');
+}
+
+function updateWebuiRuntimeSummary(runtimeInfo, connectionType = 'local') {
+    const summaryElement = getWebuiDefaultConfigText();
+
+    if (connectionType !== 'local') {
+        if (summaryElement) {
+            summaryElement.textContent = '当前为远程模式，请以远程服务实际配置为准';
+        }
+        return;
+    }
+
+    const currentPort = Number(runtimeInfo?.port) > 0 ? Number(runtimeInfo.port) : DEFAULT_LOCAL_WEBUI_PORT;
+    const currentKey = String(
+        runtimeInfo?.password
+        || localStorage.getItem('local-management-key')
+        || '未读取'
+    ).trim() || '未读取';
+
+    if (summaryElement) {
+        summaryElement.textContent = `端口 ${currentPort} / 开启远程管理 / 当前密钥 ${currentKey}`;
+    }
 }
 
 async function getCurrentWebuiUrl() {
@@ -657,25 +679,29 @@ function updateComponentUpdateResult(result) {
 
 async function refreshWebuiPanel() {
     syncSidebarLabels();
+    const connectionType = localStorage.getItem('type') || 'local';
+    let runtimeInfo = null;
+
+    if (connectionType === 'local' && window.__TAURI__?.core?.invoke) {
+        try {
+            runtimeInfo = await invokeTauri('get_local_runtime_info');
+            if (runtimeInfo?.password) {
+                localStorage.setItem('local-management-key', runtimeInfo.password);
+            }
+        } catch (error) {
+            console.error('Failed to resolve local runtime info:', error);
+        }
+    }
+
+    updateWebuiRuntimeSummary(runtimeInfo, connectionType);
 
     const webuiUrlText = getCurrentWebuiUrlText();
     if (webuiUrlText) {
         try {
-            webuiUrlText.textContent = await getCurrentWebuiUrl();
+            webuiUrlText.textContent = runtimeInfo?.managementUrl || runtimeInfo?.url || await getCurrentWebuiUrl();
         } catch (error) {
             console.error('Failed to resolve WebUI URL:', error);
             webuiUrlText.textContent = '未获取到可用地址';
-        }
-    }
-
-    const agentGuidePathText = getAgentGuidePathText();
-    if (agentGuidePathText && window.__TAURI__?.core?.invoke) {
-        try {
-            const result = await invokeTauri('get_agent_guide_path');
-            agentGuidePathText.textContent = result.path || '未生成教程文件';
-        } catch (error) {
-            console.error('Failed to resolve agent guide path:', error);
-            agentGuidePathText.textContent = '未生成教程文件';
         }
     }
 
@@ -731,19 +757,6 @@ async function handleOpenWebuiRepo() {
     } catch (error) {
         console.error('Failed to open WebUI repository:', error);
         showError('打开 WebUI 项目仓库失败');
-    }
-}
-
-async function handleOpenAgentGuide() {
-    try {
-        const result = await invokeTauri('open_agent_guide_path');
-        if (result.path) {
-            setTextById('agent-guide-path-text', result.path);
-        }
-        showSuccessMessage('已用资源管理器打开接入教程路径');
-    } catch (error) {
-        console.error('Failed to open agent guide path:', error);
-        showError(error?.message || '打开接入教程路径失败');
     }
 }
 
@@ -867,7 +880,6 @@ async function handleOpenWebui() {
 function bindUtilityEvents() {
     bindButtonOnce('open-webui-btn', handleOpenWebui);
     bindButtonOnce('open-webui-repo-btn', handleOpenWebuiRepo);
-    bindButtonOnce('open-agent-guide-btn', handleOpenAgentGuide);
     bindButtonOnce('run-network-test-btn', handleRunNetworkTest);
     bindButtonOnce('check-component-update-btn', handleCheckComponentUpdates);
     bindButtonOnce('component-update-confirm-btn', handleConfirmComponentUpdate);
@@ -886,3 +898,139 @@ window.refreshWebuiPanel = refreshWebuiPanel;
 window.refreshNetworkTestPanel = refreshNetworkTestPanel;
 window.refreshComponentUpdatePanel = refreshComponentUpdatePanel;
 window.refreshProjectLinkPanel = refreshProjectLinkPanel;
+
+function syncSidebarLabels() {
+    const labelMap = {
+        basic: '基础设置',
+        webui: 'WebUI',
+        'network-test': '网络测试',
+        'component-update': '组件更新',
+        'project-link': '项目地址',
+        'access-token': '接入教程',
+        auth: '认证文件',
+        api: '第三方 API Keys',
+        openai: 'OpenAI 兼容'
+    };
+
+    const title = document.querySelector('.sidebar-title');
+    if (title) {
+        title.textContent = 'EasyCLI 控制台';
+    }
+
+    Object.entries(labelMap).forEach(([tabId, label]) => {
+        const tab = document.querySelector(`.tab[data-tab="${tabId}"]`);
+        if (tab) {
+            tab.textContent = label;
+        }
+    });
+}
+
+function applyWebuiChineseText() {
+    const title = document.querySelector('#webui-content .webui-card-title');
+    const description = document.querySelector('#webui-content .webui-card-description');
+    const badge = document.querySelector('#webui-content .webui-badge');
+    const metaLabels = document.querySelectorAll('#webui-content .webui-meta-label');
+    const actions = document.querySelectorAll('#webui-content .webui-action-btn');
+
+    if (title) {
+        title.textContent = 'WebUI 浏览器入口';
+    }
+    if (description) {
+        description.textContent = '直接调用 CLI Proxy API Management Center，在浏览器中管理当前服务。';
+    }
+    if (badge) {
+        badge.textContent = '浏览器';
+    }
+    if (metaLabels[0]) {
+        metaLabels[0].textContent = '当前 WebUI 地址';
+    }
+    if (metaLabels[1]) {
+        metaLabels[1].textContent = '当前控制台配置';
+    }
+    if (actions[0]) {
+        actions[0].textContent = '打开 WebUI';
+    }
+    if (actions[1]) {
+        actions[1].textContent = '查看项目仓库';
+    }
+}
+
+async function refreshWebuiPanel() {
+    syncSidebarLabels();
+    applyWebuiChineseText();
+
+    const connectionType = localStorage.getItem('type') || 'local';
+    let runtimeInfo = null;
+
+    if (connectionType === 'local' && window.__TAURI__?.core?.invoke) {
+        try {
+            runtimeInfo = await invokeTauri('get_local_runtime_info');
+            if (runtimeInfo?.password) {
+                localStorage.setItem('local-management-key', runtimeInfo.password);
+            }
+        } catch (error) {
+            console.error('Failed to resolve local runtime info:', error);
+        }
+    }
+
+    updateWebuiRuntimeSummary(runtimeInfo, connectionType);
+
+    const webuiUrlText = getCurrentWebuiUrlText();
+    if (webuiUrlText) {
+        try {
+            webuiUrlText.textContent = runtimeInfo?.managementUrl || runtimeInfo?.url || await getCurrentWebuiUrl();
+        } catch (error) {
+            console.error('Failed to resolve WebUI URL:', error);
+            webuiUrlText.textContent = '未获取到可用地址';
+        }
+    }
+
+    bindUtilityEvents();
+}
+
+async function handleOpenWebui() {
+    const connectionType = localStorage.getItem('type') || 'local';
+
+    try {
+        const webuiUrl = connectionType === 'local'
+            ? await ensureLocalWebuiUrl()
+            : await getCurrentWebuiUrl();
+        const urlText = getCurrentWebuiUrlText();
+        if (urlText) {
+            urlText.textContent = webuiUrl;
+        }
+        await openExternalUrl(webuiUrl);
+        showSuccessMessage('已在浏览器中打开 WebUI');
+    } catch (error) {
+        console.error('Failed to open WebUI:', error);
+
+        if (connectionType === 'local') {
+            try {
+                const recoveredUrl = await restartLocalWebuiUrl();
+                const urlText = getCurrentWebuiUrlText();
+                if (urlText) {
+                    urlText.textContent = recoveredUrl;
+                }
+                await openExternalUrl(recoveredUrl);
+                showSuccessMessage('本地服务已重启，并在浏览器中打开 WebUI');
+                return;
+            } catch (restartError) {
+                console.error('Failed to recover local WebUI:', restartError);
+                showError(restartError?.message || error?.message || '打开 WebUI 失败');
+                return;
+            }
+        }
+
+        showError(error?.message || '打开 WebUI 失败');
+    }
+}
+
+async function handleOpenWebuiRepo() {
+    try {
+        await openExternalUrl(WEBUI_REPO_URL);
+        showSuccessMessage('已打开 WebUI 项目仓库');
+    } catch (error) {
+        console.error('Failed to open WebUI repository:', error);
+        showError('打开 WebUI 项目仓库失败');
+    }
+}

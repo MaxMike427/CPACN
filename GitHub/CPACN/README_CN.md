@@ -4,12 +4,12 @@
 
 这是一个面向 Windows 的 EasyCLI 定制分支。它保留了基于 Tauri 的桌面外壳，同时把最新的本地运行核心和 WebUI 直接打包进安装包，并加入了适合本地管理 CLIProxyAPI 的中文主控制台。
 
-当前定制版版本号：`1.2.0`
+当前定制版版本号：`2.0.0`
 
 当前内置上游组件：
 
-- `CLIProxyAPI v6.9.8`
-- `Cli-Proxy-API-Management-Center v1.7.28`
+- `CLIProxyAPI v6.9.38`
+- `Cli-Proxy-API-Management-Center v1.8.1`
 
 ## 定制版亮点
 
@@ -25,6 +25,13 @@
 - 默认开启远程管理，默认远程管理密钥为 `12345678`。
 
 ## 完整更新记录
+
+### `1.2.1`
+
+- 将安装包内置 CLIProxyAPI 更新到 `v6.9.38`。
+- 将安装包内置 WebUI 更新到 `Cli-Proxy-API-Management-Center v1.8.1`。
+- 在保留现有本地定制功能、补丁和界面行为的前提下重新构建安装包与主程序。
+- 同步更新 GitHub 上传源码快照，确保导出源码与内置组件版本一致。
 
 ### `1.2.0`
 
@@ -51,7 +58,7 @@
 ### `1.0.x`
 
 - 将 GUI 界面汉化。
-- 新增 WebUI 浏览器入口和 AI Agent 接入教程入口。
+- 新增 WebUI 浏览器入口。
 - 新增基于 `iping` 的网络测试面板。
 - 改为默认本地启动，正常启动时不再强制先手动选择本地或远程。
 - 新增中文 NSIS 安装包和桌面快捷方式。
@@ -66,7 +73,7 @@
 
 ## 内置功能
 
-- `WebUI 与教程`：打开管理中心和本地 Markdown 接入教程。
+- `WebUI 与教程`：打开管理中心。
 - `网络测试`：显示 IP、国家、运营商、是否代理、IP 类型、风险分数、风险类型。
 - `组件更新`：检查 CLIProxyAPI 和 WebUI 的 GitHub 最新版本，并在确认后下载、覆盖、重启。
 - `项目地址`：用默认浏览器打开当前定制版项目仓库。
@@ -84,11 +91,11 @@
 
 ## 上游同步状态
 
-检查时间：`2026-04-02`
+检查时间：`2026-04-26`
 
 - `router-for-me/EasyCLI`：当前桌面外壳基线仍然跟随上游 `main` 的 `9758f35`。
-- `router-for-me/CLIProxyAPI`：当前定制版安装包内置 `v6.9.8`。
-- `router-for-me/Cli-Proxy-API-Management-Center`：当前定制版安装包内置 `v1.7.28`。
+- `router-for-me/CLIProxyAPI`：当前定制版安装包内置 `v6.9.38`。
+- `router-for-me/Cli-Proxy-API-Management-Center`：当前定制版安装包内置 `v1.8.1`。
 
 ## 项目结构
 
@@ -96,7 +103,7 @@
 - `css/`：桌面界面样式。
 - `images/`：图标与图片资源。
 - `src-tauri/src/main.rs`：Tauri 后端、运行核心管理和原生集成逻辑。
-- `src-tauri/resources/`：内置运行资源、WebUI 和 AI Agent 教程模板。
+- `src-tauri/resources/`：内置运行资源和 WebUI 资源。
 - `src-tauri/windows/`：NSIS 安装器 Hook 脚本。
 - `GitHub/CPACN/`：适合直接上传 GitHub 的源码快照，不包含构建产物。
 

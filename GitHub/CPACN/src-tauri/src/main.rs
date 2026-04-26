@@ -9,6 +9,8 @@
 use futures_util::StreamExt;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -78,16 +80,8 @@ fn webui_version_path() -> Result<PathBuf, AppError> {
     Ok(app_dir()?.join("webui-version.txt"))
 }
 
-fn docs_dir() -> Result<PathBuf, AppError> {
-    Ok(app_dir()?.join("docs"))
-}
-
 fn static_management_html_path() -> Result<PathBuf, AppError> {
     Ok(app_dir()?.join("static").join("management.html"))
-}
-
-fn agent_guide_path() -> Result<PathBuf, AppError> {
-    Ok(docs_dir()?.join(AGENT_GUIDE_FILE_NAME))
 }
 
 fn ensure_yaml_mapping(value: &mut serde_yaml::Value) -> &mut serde_yaml::Mapping {
@@ -210,6 +204,15 @@ fn save_local_config(config_path: &Path, value: &serde_yaml::Value) -> Result<()
     Ok(())
 }
 
+fn generate_access_token() -> String {
+    let random_part: String = thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(63)
+        .map(char::from)
+        .collect();
+    format!("sk-{}", random_part)
+}
+
 fn ensure_config_defaults(value: &mut serde_yaml::Value) -> Result<bool, AppError> {
     let root = ensure_yaml_mapping(value);
     let mut changed = false;
@@ -262,6 +265,28 @@ fn ensure_config_defaults(value: &mut serde_yaml::Value) -> Result<bool, AppErro
         remote_management.insert(
             serde_yaml::Value::from("secret-key"),
             serde_yaml::Value::from(management_key.effective_key),
+        );
+        changed = true;
+    }
+
+    let api_keys_key = serde_yaml::Value::from("api-keys");
+    let has_valid_access_token = root
+        .get(&api_keys_key)
+        .and_then(|value| value.as_sequence())
+        .map(|sequence| {
+            sequence.iter().any(|item| {
+                item.as_str()
+                    .map(str::trim)
+                    .map(|token| !token.is_empty())
+                    .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false);
+
+    if !has_valid_access_token {
+        root.insert(
+            api_keys_key,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::from(generate_access_token())]),
         );
         changed = true;
     }
@@ -319,52 +344,6 @@ fn prepare_launch_config(version_path: &Path) -> Result<(PathBuf, u16, String), 
     save_local_config(&config_path, &config_value)?;
 
     Ok((config_path, port, password))
-}
-
-fn ensure_agent_guide_file() -> Result<PathBuf, AppError> {
-    let docs = docs_dir()?;
-    fs::create_dir_all(&docs)?;
-    let path = agent_guide_path()?;
-    fs::write(&path, AGENT_GUIDE_CONTENT)?;
-    Ok(path)
-}
-
-fn open_in_file_manager(target: &Path) -> Result<(), AppError> {
-    #[cfg(target_os = "windows")]
-    {
-        let mut command = std::process::Command::new("explorer");
-        if target.is_file() {
-            command.arg("/select,").arg(target);
-        } else {
-            command.arg(target);
-        }
-        command.spawn()?;
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        let mut command = std::process::Command::new("open");
-        if target.is_file() {
-            command.arg("-R").arg(target);
-        } else {
-            command.arg(target);
-        }
-        command.spawn()?;
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let open_target = if target.is_file() {
-            target.parent().unwrap_or(target)
-        } else {
-            target
-        };
-        std::process::Command::new("xdg-open")
-            .arg(open_target)
-            .spawn()?;
-    }
-
-    Ok(())
 }
 
 fn open_external_target(target: &str) -> Result<(), AppError> {
@@ -650,8 +629,6 @@ const MANAGEMENT_CENTER_ASSET_NAME: &str = "management.html";
 const DEFAULT_PANEL_GITHUB_REPOSITORY: &str =
     "https://github.com/router-for-me/Cli-Proxy-API-Management-Center";
 const PROJECT_REPOSITORY_URL: &str = "https://github.com/MaxMike427/CPACN";
-const AGENT_GUIDE_FILE_NAME: &str = "AI_AGENT_ACCESS_GUIDE.md";
-const AGENT_GUIDE_CONTENT: &str = include_str!("../resources/AI_AGENT_ACCESS_GUIDE.md");
 const BUNDLED_CLI_PROXY_API_VERSION: &str =
     include_str!("../resources/bundled/cliproxyapi-version.txt");
 const BUNDLED_CLI_PROXY_API_ASSET_NAME: &str =
@@ -907,7 +884,6 @@ fn ensure_config(version_path: &Path) -> Result<(), AppError> {
         save_local_config(&config_path, &config_value)?;
     }
     let _ = patch_management_center_html();
-    let _ = ensure_agent_guide_file()?;
     Ok(())
 }
 
@@ -1673,6 +1649,33 @@ fn update_config_yaml(
     if !p.exists() {
         return Err("Configuration file does not exist".into());
     }
+    let normalized_value = if endpoint == "api-keys" {
+        if is_delete.unwrap_or(false) {
+            return Err("At least one access token is required".into());
+        }
+
+        let normalized_keys: Vec<String> = value
+            .as_array()
+            .ok_or("Access tokens must be an array")?
+            .iter()
+            .filter_map(|item| item.as_str().map(str::trim))
+            .filter(|token| !token.is_empty())
+            .map(ToOwned::to_owned)
+            .collect();
+
+        if normalized_keys.is_empty() {
+            return Err("At least one access token is required".into());
+        }
+
+        serde_json::Value::Array(
+            normalized_keys
+                .into_iter()
+                .map(serde_json::Value::String)
+                .collect(),
+        )
+    } else {
+        value.clone()
+    };
     let content = fs::read_to_string(&p).map_err(|e| e.to_string())?;
     let mut conf: serde_yaml::Value = serde_yaml::from_str(&content).map_err(|e| e.to_string())?;
     let parts: Vec<&str> = endpoint.split('.').collect();
@@ -1686,7 +1689,7 @@ fn update_config_yaml(
             } else {
                 current.insert(
                     key,
-                    serde_yaml::to_value(&value).map_err(|e| e.to_string())?,
+                    serde_yaml::to_value(&normalized_value).map_err(|e| e.to_string())?,
                 );
             }
         } else {
@@ -1703,7 +1706,7 @@ fn update_config_yaml(
     let out = serde_yaml::to_string(&conf).map_err(|e| e.to_string())?;
     fs::write(&p, out).map_err(|e| e.to_string())?;
     if endpoint == "remote-management.secret-key" && !is_delete.unwrap_or(false) {
-        if let Some(secret_key) = value.as_str() {
+        if let Some(secret_key) = normalized_value.as_str() {
             write_management_key_file(secret_key).map_err(|e| e.to_string())?;
         }
     }
@@ -2364,22 +2367,6 @@ fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn get_agent_guide_path() -> Result<serde_json::Value, String> {
-    let path = ensure_agent_guide_file().map_err(|e| e.to_string())?;
-    Ok(json!({ "path": path.to_string_lossy().to_string() }))
-}
-
-#[tauri::command]
-fn open_agent_guide_path() -> Result<serde_json::Value, String> {
-    let path = ensure_agent_guide_file().map_err(|e| e.to_string())?;
-    open_in_file_manager(&path).map_err(|e| e.to_string())?;
-    Ok(json!({
-        "success": true,
-        "path": path.to_string_lossy().to_string()
-    }))
-}
-
-#[tauri::command]
 fn get_local_runtime_info() -> Result<serde_json::Value, String> {
     let port = current_local_service_port();
     let password = CLI_PROXY_PASSWORD
@@ -2415,9 +2402,7 @@ async fn ensure_local_webui_ready(app: tauri::AppHandle) -> Result<serde_json::V
 }
 
 #[tauri::command]
-async fn restart_local_service_stack(
-    app: tauri::AppHandle,
-) -> Result<serde_json::Value, String> {
+async fn restart_local_service_stack(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let _ = ensure_latest_local_installation(String::new())
         .await
         .map_err(|error| error.to_string())?;
@@ -2458,7 +2443,7 @@ fn open_external_link(url: String) -> Result<serde_json::Value, String> {
 #[tauri::command]
 async fn run_network_test() -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
-        .user_agent("EasyCLI/1.2.0")
+        .user_agent("EasyCLI/2.0.0")
         .timeout(Duration::from_secs(15))
         .build()
         .map_err(|e| format!("创建网络测试请求失败: {}", e))?;
@@ -2917,8 +2902,6 @@ fn main() {
             restart_cliproxyapi,
             start_cliproxyapi,
             open_settings_window,
-            get_agent_guide_path,
-            open_agent_guide_path,
             open_external_link,
             get_local_runtime_info,
             ensure_local_webui_ready,

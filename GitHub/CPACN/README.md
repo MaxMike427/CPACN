@@ -4,12 +4,12 @@
 
 This repository is a Windows-focused custom fork of EasyCLI. It keeps the Tauri desktop shell, bundles the latest local runtime and WebUI into the installer, and adds a Chinese control console tailored for local CLIProxyAPI management.
 
-Current custom version: `1.2.0`
+Current custom version: `2.0.0`
 
 Bundled upstream components:
 
-- `CLIProxyAPI v6.9.8`
-- `Cli-Proxy-API-Management-Center v1.7.28`
+- `CLIProxyAPI v6.9.38`
+- `Cli-Proxy-API-Management-Center v1.8.1`
 
 ## Highlights
 
@@ -25,6 +25,13 @@ Bundled upstream components:
 - Default remote management enabled with default secret key `12345678`.
 
 ## Full Custom Update Log
+
+### `1.2.1`
+
+- Refreshed the bundled upstream runtime to `CLIProxyAPI v6.9.38`.
+- Refreshed the bundled WebUI to `Cli-Proxy-API-Management-Center v1.8.1`.
+- Rebuilt the installer and executable while preserving all existing local custom behavior, patches, and UI changes.
+- Synced the GitHub-ready source snapshot so the exported source matches the new bundled components and version metadata.
 
 ### `1.2.0`
 
@@ -66,7 +73,7 @@ Bundled upstream components:
 
 ## Built-In Tools
 
-- `WebUI & Tutorial`: opens the management center and the local Markdown integration guide.
+- `WebUI`: opens the management center in the browser.
 - `Network Test`: shows IP, country, carrier, proxy status, IP type, risk score, and risk type.
 - `Component Update`: checks GitHub releases for CLIProxyAPI and WebUI, then updates and restarts after confirmation.
 - `Project Link`: opens the custom project repository in the default browser.
@@ -84,11 +91,11 @@ This repository is a community customization and is not an official upstream rel
 
 ## Upstream Sync Status
 
-Checked on `2026-04-02`.
+Checked on `2026-04-26`.
 
 - `router-for-me/EasyCLI`: shell baseline still follows upstream `main` at commit `9758f35`.
-- `router-for-me/CLIProxyAPI`: bundled into this build as `v6.9.8`.
-- `router-for-me/Cli-Proxy-API-Management-Center`: bundled into this build as `v1.7.28`.
+- `router-for-me/CLIProxyAPI`: bundled into this build as `v6.9.38`.
+- `router-for-me/Cli-Proxy-API-Management-Center`: bundled into this build as `v1.8.1`.
 
 ## Project Structure
 
@@ -96,7 +103,7 @@ Checked on `2026-04-02`.
 - `css/`: desktop UI styles.
 - `images/`: icons and image assets.
 - `src-tauri/src/main.rs`: Tauri backend, runtime management, and native integration logic.
-- `src-tauri/resources/`: bundled runtime resources, WebUI, and AI agent guide template.
+- `src-tauri/resources/`: bundled runtime resources and WebUI assets.
 - `src-tauri/windows/`: NSIS installer hook scripts.
 - `GitHub/CPACN/`: GitHub-ready source snapshot without build artifacts.
 
