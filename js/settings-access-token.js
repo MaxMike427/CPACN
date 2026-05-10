@@ -201,37 +201,22 @@ function deleteAccessTokenKey(index) {
     );
 }
 
-function buildCodexConfig(token, { websocket = false, windows = false } = {}) {
+function buildCodexConfig(token, { windows = false } = {}) {
+    const codexBaseUrl = `${ACCESS_TOKEN_USAGE_BASE_URL.replace(/\/+$/, '')}/v1`;
     const lines = [
-        'model_provider = "OpenAI"',
-        'model = "gpt-5.4"',
-        'review_model = "gpt-5.4"',
-        'model_reasoning_effort = "xhigh"',
-        'disable_response_storage = true',
-        'network_access = "enabled"',
-        'windows_wsl_setup_acknowledged = true',
-        'model_context_window = 1000000',
-        'model_auto_compact_token_limit = 900000',
+        'model_provider = "cliproxyapi"',
+        'model = "gpt-5-codex"',
+        'model_reasoning_effort = "high"',
         '',
-        '[model_providers.OpenAI]',
-        'name = "OpenAI"',
-        `base_url = "${ACCESS_TOKEN_USAGE_BASE_URL}"`,
+        '[model_providers.cliproxyapi]',
+        'name = "cliproxyapi"',
+        `base_url = "${codexBaseUrl}"`,
         'wire_api = "responses"'
     ];
 
-    if (websocket) {
-        lines.push('supports_websockets = true');
-    }
-
-    lines.push('requires_openai_auth = true');
-
-    if (websocket) {
-        lines.push('', '[features]', 'responses_websockets_v2 = true');
-    }
-
     return {
-        intro: '将以下配置文件添加到 Codex CLI 配置目录中。',
-        note: '请确保以下内容位于 config.toml 文件的开头部分',
+        intro: '按照 CLIProxyAPI 官方文档，将以下配置写入 Codex CLI 配置目录。',
+        note: 'config.toml 中只保留与现有配置不冲突的模型和 provider 设置；API 密钥写入 auth.json。',
         pathLabel: windows ? '%userprofile%\\.codex\\config.toml' : '~/.codex/config.toml',
         configToml: lines.join('\n'),
         authPathLabel: windows ? '%userprofile%\\.codex\\auth.json' : '~/.codex/auth.json',
@@ -243,92 +228,66 @@ function buildCodexConfig(token, { websocket = false, windows = false } = {}) {
 }
 
 function buildClaudeTemplate(token, platform) {
-    const vscodePath = platform === 'macos'
+    const settingsPath = platform === 'macos'
         ? '~/.claude/settings.json'
         : '%userprofile%\\.claude\\settings.json';
-
-    const envJson = JSON.stringify({
-        env: {
-            ANTHROPIC_BASE_URL: ACCESS_TOKEN_USAGE_BASE_URL,
-            ANTHROPIC_AUTH_TOKEN: token,
-            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-            CLAUDE_CODE_ATTRIBUTION_HEADER: '0'
-        }
-    }, null, 2);
+    const env = {
+        ANTHROPIC_BASE_URL: ACCESS_TOKEN_USAGE_BASE_URL,
+        ANTHROPIC_AUTH_TOKEN: token,
+        ANTHROPIC_DEFAULT_OPUS_MODEL: 'gpt-5-codex(high)',
+        ANTHROPIC_DEFAULT_SONNET_MODEL: 'gpt-5-codex(medium)',
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: 'gpt-5-codex(low)'
+    };
+    const envJson = JSON.stringify({ env }, null, 2);
 
     let shellLabel = '';
     let shellContent = '';
 
     if (platform === 'macos') {
         shellLabel = 'Terminal';
-        shellContent = [
-            `export ANTHROPIC_BASE_URL="${ACCESS_TOKEN_USAGE_BASE_URL}"`,
-            `export ANTHROPIC_AUTH_TOKEN="${token}"`,
-            'export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1'
-        ].join('\n');
+        shellContent = Object.entries(env)
+            .map(([key, value]) => `export ${key}="${value}"`)
+            .join('\n');
     } else if (platform === 'windows-cmd') {
         shellLabel = 'Command Prompt';
-        shellContent = [
-            `set ANTHROPIC_BASE_URL=${ACCESS_TOKEN_USAGE_BASE_URL}`,
-            `set ANTHROPIC_AUTH_TOKEN=${token}`,
-            'set CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1'
-        ].join('\n');
+        shellContent = Object.entries(env)
+            .map(([key, value]) => `set ${key}=${value}`)
+            .join('\n');
     } else {
         shellLabel = 'PowerShell';
-        shellContent = [
-            `$env:ANTHROPIC_BASE_URL="${ACCESS_TOKEN_USAGE_BASE_URL}"`,
-            `$env:ANTHROPIC_AUTH_TOKEN="${token}"`,
-            '$env:CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"'
-        ].join('\n');
+        shellContent = Object.entries(env)
+            .map(([key, value]) => `$env:${key}="${value}"`)
+            .join('\n');
     }
 
     return {
-        intro: '将以下环境变量添加到您的终端配置文件中或直接在终端中运行。',
+        intro: '启动 CLIProxyAPI 服务后，按 Claude Code 官方接入方式设置以下环境变量。',
         shellLabel,
         shellContent,
-        vscodePath,
-        vscodeLabel: 'VSCode Claude Code',
+        vscodePath: settingsPath,
+        vscodeLabel: 'Claude Code settings.json',
         vscodeContent: envJson,
-        footer: '这些环境变量将在当前终端会话中生效。如需永久配置，请将其添加到 ~/.bashrc、~/.zshrc 或相应的配置文件中。'
+        footer: 'Claude Code 2.x 使用 ANTHROPIC_DEFAULT_*_MODEL 选择模型；如使用 1.x，请改用 ANTHROPIC_MODEL 与 ANTHROPIC_SMALL_FAST_MODEL。'
     };
 }
 
 function buildOpenCodeTemplate(token) {
-    const model = (name, context, output, variants = ['low', 'medium', 'high', 'xhigh']) => ({
-        name,
-        limit: { context, output },
-        options: { store: false },
-        variants: Object.fromEntries(variants.map((variant) => [variant, {}]))
-    });
-
     const content = {
+        $schema: 'https://opencode.ai/config.json',
         provider: {
             openai: {
                 options: {
-                    baseURL: `${ACCESS_TOKEN_USAGE_BASE_URL}/v1`,
+                    baseURL: `${ACCESS_TOKEN_USAGE_BASE_URL.replace(/\/+$/, '')}/v1`,
                     apiKey: token
-                },
-                models: {
-                    'gpt-5.2': model('GPT-5.2', 400000, 128000),
-                    'gpt-5.5': model('GPT-5.5', 1050000, 128000),
-                    'gpt-5.4': model('GPT-5.4', 1050000, 128000),
-                    'gpt-5.4-mini': model('GPT-5.4 Mini', 400000, 128000),
-                    'gpt-5.3-codex-spark': model('GPT-5.3 Codex Spark', 128000, 32000),
-                    'gpt-5.3-codex': model('GPT-5.3 Codex', 400000, 128000),
-                    'codex-mini-latest': model('Codex Mini', 200000, 100000, ['low', 'medium', 'high'])
                 }
             }
         },
-        agent: {
-            build: { options: { store: false } },
-            plan: { options: { store: false } }
-        },
-        $schema: 'https://opencode.ai/config.json'
+        model: 'gpt-5.3-codex'
     };
 
     return {
-        intro: '配置文件路径：~/.config/opencode/opencode.json（或 opencode.json），不存在请手动创建。可使用默认 provider（openai/anthropic/google）或自定义 provider_id。API Key 支持直接面板「发送访问令牌」/ connect 命令配置。示例仅供参考，模型与选项可按需调整。',
-        pathLabel: 'opencode.json',
+        intro: '启动 CLIProxyAPI 服务后，按照 OpenCode 官方接入方式编辑配置文件。',
+        pathLabel: '~/.config/opencode/opencode.json',
         content: JSON.stringify(content, null, 2)
     };
 }
@@ -359,7 +318,6 @@ function renderUsageCodeBlock(pathLabel, content, extraClass = '') {
 function getAccessTokenUsageTabs() {
     return [
         { id: 'codex', label: 'Codex CLI' },
-        { id: 'codex-ws', label: 'Codex CLI (WebSocket)' },
         { id: 'claude', label: 'Claude Code' },
         { id: 'opencode', label: 'OpenCode' }
     ];
@@ -397,10 +355,9 @@ function renderAccessTokenUsageContent() {
     const token = accessTokenUsageModalState.token;
     const activeTab = accessTokenUsageModalState.activeTab;
 
-    if (activeTab === 'codex' || activeTab === 'codex-ws') {
+    if (activeTab === 'codex') {
         const activePlatform = accessTokenUsageModalState.platforms[activeTab];
         const template = buildCodexConfig(token, {
-            websocket: activeTab === 'codex-ws',
             windows: activePlatform === 'windows'
         });
 
@@ -524,7 +481,6 @@ function showAccessTokenUsageModal(index) {
         activeTab: 'codex',
         platforms: {
             codex: 'windows',
-            'codex-ws': 'windows',
             claude: 'windows-cmd'
         }
     };
@@ -618,37 +574,22 @@ async function resolveAccessTokenUsageBaseUrl() {
     return normalized;
 }
 
-function buildCodexConfig(token, baseUrl, { websocket = false, windows = false } = {}) {
+function buildCodexConfig(token, baseUrl, { windows = false } = {}) {
+    const codexBaseUrl = joinUsageBaseUrl(baseUrl, 'v1');
     const lines = [
-        'model_provider = "OpenAI"',
-        'model = "gpt-5.4"',
-        'review_model = "gpt-5.4"',
-        'model_reasoning_effort = "xhigh"',
-        'disable_response_storage = true',
-        'network_access = "enabled"',
-        'windows_wsl_setup_acknowledged = true',
-        'model_context_window = 1000000',
-        'model_auto_compact_token_limit = 900000',
+        'model_provider = "cliproxyapi"',
+        'model = "gpt-5-codex"',
+        'model_reasoning_effort = "high"',
         '',
-        '[model_providers.OpenAI]',
-        'name = "OpenAI"',
-        `base_url = "${baseUrl}"`,
+        '[model_providers.cliproxyapi]',
+        'name = "cliproxyapi"',
+        `base_url = "${codexBaseUrl}"`,
         'wire_api = "responses"'
     ];
 
-    if (websocket) {
-        lines.push('supports_websockets = true');
-    }
-
-    lines.push('requires_openai_auth = true');
-
-    if (websocket) {
-        lines.push('', '[features]', 'responses_websockets_v2 = true');
-    }
-
     return {
-        intro: '将以下配置文件添加到 Codex CLI 配置目录中。',
-        note: '请确保以下内容位于 config.toml 文件的开头部分',
+        intro: '按照 CLIProxyAPI 官方文档，将以下配置写入 Codex CLI 配置目录。',
+        note: 'config.toml 中只保留与现有配置不冲突的模型和 provider 设置；API 密钥写入 auth.json。',
         pathLabel: windows ? '%userprofile%\\.codex\\config.toml' : '~/.codex/config.toml',
         configToml: lines.join('\n'),
         authPathLabel: windows ? '%userprofile%\\.codex\\auth.json' : '~/.codex/auth.json',
@@ -660,92 +601,66 @@ function buildCodexConfig(token, baseUrl, { websocket = false, windows = false }
 }
 
 function buildClaudeTemplate(token, baseUrl, platform) {
-    const vscodePath = platform === 'macos'
+    const settingsPath = platform === 'macos'
         ? '~/.claude/settings.json'
         : '%userprofile%\\.claude\\settings.json';
-
-    const envJson = JSON.stringify({
-        env: {
-            ANTHROPIC_BASE_URL: baseUrl,
-            ANTHROPIC_AUTH_TOKEN: token,
-            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-            CLAUDE_CODE_ATTRIBUTION_HEADER: '0'
-        }
-    }, null, 2);
+    const env = {
+        ANTHROPIC_BASE_URL: baseUrl,
+        ANTHROPIC_AUTH_TOKEN: token,
+        ANTHROPIC_DEFAULT_OPUS_MODEL: 'gpt-5-codex(high)',
+        ANTHROPIC_DEFAULT_SONNET_MODEL: 'gpt-5-codex(medium)',
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: 'gpt-5-codex(low)'
+    };
+    const envJson = JSON.stringify({ env }, null, 2);
 
     let shellLabel = '';
     let shellContent = '';
 
     if (platform === 'macos') {
         shellLabel = 'Terminal';
-        shellContent = [
-            `export ANTHROPIC_BASE_URL="${baseUrl}"`,
-            `export ANTHROPIC_AUTH_TOKEN="${token}"`,
-            'export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1'
-        ].join('\n');
+        shellContent = Object.entries(env)
+            .map(([key, value]) => `export ${key}="${value}"`)
+            .join('\n');
     } else if (platform === 'windows-cmd') {
         shellLabel = 'Command Prompt';
-        shellContent = [
-            `set ANTHROPIC_BASE_URL=${baseUrl}`,
-            `set ANTHROPIC_AUTH_TOKEN=${token}`,
-            'set CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1'
-        ].join('\n');
+        shellContent = Object.entries(env)
+            .map(([key, value]) => `set ${key}=${value}`)
+            .join('\n');
     } else {
         shellLabel = 'PowerShell';
-        shellContent = [
-            `$env:ANTHROPIC_BASE_URL="${baseUrl}"`,
-            `$env:ANTHROPIC_AUTH_TOKEN="${token}"`,
-            '$env:CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"'
-        ].join('\n');
+        shellContent = Object.entries(env)
+            .map(([key, value]) => `$env:${key}="${value}"`)
+            .join('\n');
     }
 
     return {
-        intro: '将以下环境变量添加到您的终端配置文件中或直接在终端中运行。',
+        intro: '启动 CLIProxyAPI 服务后，按 Claude Code 官方接入方式设置以下环境变量。',
         shellLabel,
         shellContent,
-        vscodePath,
-        vscodeLabel: 'VSCode Claude Code',
+        vscodePath: settingsPath,
+        vscodeLabel: 'Claude Code settings.json',
         vscodeContent: envJson,
-        footer: '这些环境变量将在当前终端会话中生效。如需永久配置，请将其添加到 ~/.bashrc、~/.zshrc 或相应的配置文件中。'
+        footer: 'Claude Code 2.x 使用 ANTHROPIC_DEFAULT_*_MODEL 选择模型；如使用 1.x，请改用 ANTHROPIC_MODEL 与 ANTHROPIC_SMALL_FAST_MODEL。'
     };
 }
 
 function buildOpenCodeTemplate(token, baseUrl) {
-    const model = (name, context, output, variants = ['low', 'medium', 'high', 'xhigh']) => ({
-        name,
-        limit: { context, output },
-        options: { store: false },
-        variants: Object.fromEntries(variants.map((variant) => [variant, {}]))
-    });
-
     const content = {
+        $schema: 'https://opencode.ai/config.json',
         provider: {
             openai: {
                 options: {
                     baseURL: joinUsageBaseUrl(baseUrl, 'v1'),
                     apiKey: token
-                },
-                models: {
-                    'gpt-5.2': model('GPT-5.2', 400000, 128000),
-                    'gpt-5.5': model('GPT-5.5', 1050000, 128000),
-                    'gpt-5.4': model('GPT-5.4', 1050000, 128000),
-                    'gpt-5.4-mini': model('GPT-5.4 Mini', 400000, 128000),
-                    'gpt-5.3-codex-spark': model('GPT-5.3 Codex Spark', 128000, 32000),
-                    'gpt-5.3-codex': model('GPT-5.3 Codex', 400000, 128000),
-                    'codex-mini-latest': model('Codex Mini', 200000, 100000, ['low', 'medium', 'high'])
                 }
             }
         },
-        agent: {
-            build: { options: { store: false } },
-            plan: { options: { store: false } }
-        },
-        $schema: 'https://opencode.ai/config.json'
+        model: 'gpt-5.3-codex'
     };
 
     return {
-        intro: '配置文件路径：~/.config/opencode/opencode.json（或 opencode.json），不存在请手动创建。可使用默认 provider（openai/anthropic/google）或自定义 provider_id。API Key 支持通过发送访问令牌或 connect 命令配置。示例仅供参考，模型与选项可按需调整。',
-        pathLabel: 'opencode.json',
+        intro: '启动 CLIProxyAPI 服务后，按照 OpenCode 官方接入方式编辑配置文件。',
+        pathLabel: '~/.config/opencode/opencode.json',
         content: JSON.stringify(content, null, 2)
     };
 }
@@ -760,10 +675,9 @@ function renderAccessTokenUsageContent() {
     const baseUrl = accessTokenUsageModalState.baseUrl;
     const activeTab = accessTokenUsageModalState.activeTab;
 
-    if (activeTab === 'codex' || activeTab === 'codex-ws') {
+    if (activeTab === 'codex') {
         const activePlatform = accessTokenUsageModalState.platforms[activeTab];
         const template = buildCodexConfig(token, baseUrl, {
-            websocket: activeTab === 'codex-ws',
             windows: activePlatform === 'windows'
         });
 
@@ -872,8 +786,7 @@ async function showAccessTokenUsageModal(index) {
             activeTab: 'codex',
             platforms: {
                 codex: 'windows',
-                'codex-ws': 'windows',
-                claude: 'windows-cmd'
+                    claude: 'windows-cmd'
             }
         };
 

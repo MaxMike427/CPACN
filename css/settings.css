@@ -2199,8 +2199,12 @@ html[data-theme-resolved="light"] {
     --theme-shadow: 0 12px 24px rgba(15, 23, 42, 0.04);
     --theme-usage-bg: #ffffff;
     --theme-usage-panel: #f8fafc;
-    --theme-code-bg: #0f172a;
-    --theme-code-text: #e2e8f0;
+    --theme-code-bg: #f8fafc;
+    --theme-code-header-bg: #ffffff;
+    --theme-code-text: #0f172a;
+    --theme-scrollbar-track: #eef2f7;
+    --theme-scrollbar-thumb: #cbd5e1;
+    --theme-scrollbar-thumb-hover: #94a3b8;
     --theme-info-bg: rgba(59, 130, 246, 0.12);
     --theme-info-text: #1d4ed8;
     --theme-warning-bg: rgba(234, 179, 8, 0.12);
@@ -2224,8 +2228,12 @@ html[data-theme-resolved="dark"] {
     --theme-shadow: 0 20px 40px rgba(2, 6, 23, 0.45);
     --theme-usage-bg: #111827;
     --theme-usage-panel: #1e293b;
-    --theme-code-bg: #0f172a;
+    --theme-code-bg: var(--theme-surface-soft);
+    --theme-code-header-bg: var(--theme-surface-alt);
     --theme-code-text: #e2e8f0;
+    --theme-scrollbar-track: #0f172a;
+    --theme-scrollbar-thumb: #475569;
+    --theme-scrollbar-thumb-hover: #64748b;
     --theme-info-bg: rgba(59, 130, 246, 0.16);
     --theme-info-text: #bfdbfe;
     --theme-warning-bg: rgba(245, 158, 11, 0.16);
@@ -2379,14 +2387,80 @@ html[data-theme-resolved] .usage-code-block {
     border-color: var(--theme-border) !important;
 }
 
+html[data-theme-resolved] .usage-code-header {
+    background: var(--theme-code-header-bg) !important;
+}
+
 html[data-theme-resolved] .usage-code-pre {
     color: var(--theme-code-text) !important;
+    scrollbar-color: var(--theme-scrollbar-thumb) var(--theme-scrollbar-track) !important;
 }
 
 html[data-theme-resolved] #access-token-usage-modal .modal-content {
     background: var(--theme-usage-panel) !important;
     color: var(--theme-text) !important;
     border-color: var(--theme-border) !important;
+    scrollbar-color: var(--theme-scrollbar-thumb) var(--theme-scrollbar-track) !important;
+}
+
+html[data-theme-resolved] #access-token-usage-modal .modal-header,
+html[data-theme-resolved] #access-token-usage-modal .form-actions,
+html[data-theme-resolved] .access-token-usage-actions {
+    background: var(--theme-usage-panel) !important;
+    border-color: var(--theme-border) !important;
+}
+
+html[data-theme-resolved] #access-token-usage-modal .modal-close {
+    color: var(--theme-text-muted) !important;
+    background: transparent !important;
+}
+
+html[data-theme-resolved] #access-token-usage-modal .modal-close:hover {
+    color: var(--theme-accent) !important;
+}
+
+html[data-theme-resolved] .usage-tab,
+html[data-theme-resolved] .usage-platform-tab {
+    color: var(--theme-text-muted) !important;
+}
+
+html[data-theme-resolved] .usage-tab:hover,
+html[data-theme-resolved] .usage-platform-tab:hover,
+html[data-theme-resolved] .usage-tab.active,
+html[data-theme-resolved] .usage-platform-tab.active {
+    color: var(--theme-accent) !important;
+    border-bottom-color: var(--theme-accent) !important;
+}
+
+html[data-theme-resolved] .access-token-usage-modal-body {
+    scrollbar-color: var(--theme-scrollbar-thumb) var(--theme-scrollbar-track) !important;
+}
+
+html[data-theme-resolved] .access-token-usage-modal-body::-webkit-scrollbar,
+html[data-theme-resolved] .usage-code-pre::-webkit-scrollbar,
+html[data-theme-resolved] #access-token-usage-modal .modal-content::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+html[data-theme-resolved] .access-token-usage-modal-body::-webkit-scrollbar-track,
+html[data-theme-resolved] .usage-code-pre::-webkit-scrollbar-track,
+html[data-theme-resolved] #access-token-usage-modal .modal-content::-webkit-scrollbar-track {
+    background: var(--theme-scrollbar-track) !important;
+}
+
+html[data-theme-resolved] .access-token-usage-modal-body::-webkit-scrollbar-thumb,
+html[data-theme-resolved] .usage-code-pre::-webkit-scrollbar-thumb,
+html[data-theme-resolved] #access-token-usage-modal .modal-content::-webkit-scrollbar-thumb {
+    background: var(--theme-scrollbar-thumb) !important;
+    border: 2px solid var(--theme-scrollbar-track) !important;
+    border-radius: 999px;
+}
+
+html[data-theme-resolved] .access-token-usage-modal-body::-webkit-scrollbar-thumb:hover,
+html[data-theme-resolved] .usage-code-pre::-webkit-scrollbar-thumb:hover,
+html[data-theme-resolved] #access-token-usage-modal .modal-content::-webkit-scrollbar-thumb:hover {
+    background: var(--theme-scrollbar-thumb-hover) !important;
 }
 
 html[data-theme-resolved] .usage-note.warning {

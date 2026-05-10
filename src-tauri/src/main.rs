@@ -2443,7 +2443,7 @@ fn open_external_link(url: String) -> Result<serde_json::Value, String> {
 #[tauri::command]
 async fn run_network_test() -> Result<serde_json::Value, String> {
     let client = reqwest::Client::builder()
-        .user_agent("EasyCLI/2.0.0")
+        .user_agent("EasyCLI/2.0.3")
         .timeout(Duration::from_secs(15))
         .build()
         .map_err(|e| format!("创建网络测试请求失败: {}", e))?;
@@ -2843,6 +2843,14 @@ fn disable_auto_start() -> Result<serde_json::Value, String> {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            let app_handle = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = open_settings_window(app_handle) {
+                    eprintln!("[STARTUP] failed to focus existing settings window: {}", error);
+                }
+            });
+        }))
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             let app_handle = app.handle().clone();
