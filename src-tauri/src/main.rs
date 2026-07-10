@@ -912,6 +912,10 @@ fn patch_management_center_html() -> Result<bool, AppError> {
         r#"async getModelDefinitions(t){const e=String(t??"").trim().toLowerCase();if(!e)return[];const n=await Fe.get(`/model-definitions/${encodeURIComponent(e)}`),i=n.models??n.models;return Array.isArray(i)?i:[]}"#,
         r#"async getModelDefinitions(t){const e=String(t??"").trim().toLowerCase();if(!e||e==="oauth-excluded-models"||e==="oauth-model-alias")return[];const n=await Fe.get(`/model-definitions/${encodeURIComponent(e)}`),i=n.models??n.models;return Array.isArray(i)?i:[]}"#,
     );
+    patched = patched.replace(
+        r#"getModelDefinitions(e){let t=r_(String(e??``));if(!t)return[];let n=await xf.get(`/model-definitions/${encodeURIComponent(t)}`),r=n.models??n.models;return Array.isArray(r)?r:[]}"#,
+        r#"getModelDefinitions(e){let t=r_(String(e??``));if(!t||t===\"oauth-excluded-models\"||t===\"oauth-model-alias\")return[];let n=await xf.get(`/model-definitions/${encodeURIComponent(t)}`),r=n.models??n.models;return Array.isArray(r)?r:[]}"#,
+    );
 
     patched = upsert_management_center_guard_script(&patched);
 

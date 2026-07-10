@@ -4,12 +4,12 @@
 
 这是一个面向 Windows 的 EasyCLI 定制分支。它保留了基于 Tauri 的桌面外壳，同时把最新的本地运行核心和 WebUI 直接打包进安装包，并加入了适合本地管理 CLIProxyAPI 的中文主控制台。
 
-当前定制版版本号：`2.0.3`
+当前定制版版本号：`2.0.4`
 
 当前内置上游组件：
 
-- `CLIProxyAPI v6.10.9`
-- `Cli-Proxy-API-Management-Center v1.10.1`
+- `CLIProxyAPI v7.2.61`
+- `Cli-Proxy-API-Management-Center v1.17.14`
 
 ## 定制版亮点
 
@@ -25,6 +25,11 @@
 - 默认开启远程管理，默认远程管理密钥为 `12345678`。
 
 ## 完整更新记录
+
+### `2.0.4`
+- 将内置上游组件更新到 CLIProxyAPI v7.2.61 和 Cli-Proxy-API-Management-Center v1.17.14。
+- 更新 WebUI 管理中心补丁以适配 v1.17.14 的 minified JS 结构。
+- 更新 User-Agent 标识为 EasyCLI/2.0.4。
 
 ### `2.0.3`
 
@@ -42,7 +47,7 @@
 
 - 将应用版本号升级到 `2.0.1`，并同步主工程、Tauri 配置、Rust 包信息、README 与 GitHub 上传源码快照。
 - 重新执行 Windows NSIS 发布构建，生成 `EasyCLI_2.0.1_x64-setup.exe`，保留此前历史版本安装包。
-- 构建时刷新并内置上游组件到 `CLIProxyAPI v6.10.9` 和 `Cli-Proxy-API-Management-Center v1.10.1`。
+- 构建时刷新并内置上游组件到 `CLIProxyAPI v7.2.61` 和 `Cli-Proxy-API-Management-Center v1.17.14`。
 
 ### `1.2.1`
 
@@ -109,11 +114,11 @@
 
 ## 上游同步状态
 
-检查时间：`2026-04-26`
+检查时间：`2026-07-10`
 
 - `router-for-me/EasyCLI`：当前桌面外壳基线仍然跟随上游 `main` 的 `9758f35`。
-- `router-for-me/CLIProxyAPI`：当前定制版安装包内置 `v6.10.9`。
-- `router-for-me/Cli-Proxy-API-Management-Center`：当前定制版安装包内置 `v1.10.1`。
+- `router-for-me/CLIProxyAPI`：当前定制版安装包内置 `v7.2.61`。
+- `router-for-me/Cli-Proxy-API-Management-Center`：当前定制版安装包内置 `v1.17.14`。
 
 ## 项目结构
 

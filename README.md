@@ -4,12 +4,12 @@
 
 This repository is a Windows-focused custom fork of EasyCLI. It keeps the Tauri desktop shell, bundles the latest local runtime and WebUI into the installer, and adds a Chinese control console tailored for local CLIProxyAPI management.
 
-Current custom version: `2.0.3`
+Current custom version: `2.0.4`
 
 Bundled upstream components:
 
-- `CLIProxyAPI v6.10.9`
-- `Cli-Proxy-API-Management-Center v1.10.1`
+- `CLIProxyAPI v7.2.61`
+- `Cli-Proxy-API-Management-Center v1.17.14`
 
 ## Highlights
 
@@ -25,6 +25,11 @@ Bundled upstream components:
 - Default remote management enabled with default secret key `12345678`.
 
 ## Full Custom Update Log
+
+### `2.0.4`
+- Updated bundled upstream components to CLIProxyAPI v7.2.61 and Cli-Proxy-API-Management-Center v1.17.14.
+- Updated WebUI management center patches for v1.17.14 minified JS structure.
+- Updated User-Agent identifier to EasyCLI/2.0.4.
 
 ### `2.0.3`
 
@@ -42,7 +47,7 @@ Bundled upstream components:
 
 - Bumped the application version to `2.0.1` across the main project, Tauri config, Rust package metadata, README files, and GitHub-ready source snapshot.
 - Rebuilt the Windows NSIS release installer as `EasyCLI_2.0.1_x64-setup.exe` while preserving previous installer artifacts.
-- Refreshed bundled upstream components during the release build to `CLIProxyAPI v6.10.9` and `Cli-Proxy-API-Management-Center v1.10.1`.
+- Refreshed bundled upstream components during the release build to `CLIProxyAPI v7.2.61` and `Cli-Proxy-API-Management-Center v1.17.14`.
 
 ### `1.2.1`
 
@@ -109,11 +114,11 @@ This repository is a community customization and is not an official upstream rel
 
 ## Upstream Sync Status
 
-Checked on `2026-04-26`.
+Checked on `2026-07-10`.
 
 - `router-for-me/EasyCLI`: shell baseline still follows upstream `main` at commit `9758f35`.
-- `router-for-me/CLIProxyAPI`: bundled into this build as `v6.10.9`.
-- `router-for-me/Cli-Proxy-API-Management-Center`: bundled into this build as `v1.10.1`.
+- `router-for-me/CLIProxyAPI`: bundled into this build as `v7.2.61`.
+- `router-for-me/Cli-Proxy-API-Management-Center`: bundled into this build as `v1.17.14`.
 
 ## Project Structure
 
